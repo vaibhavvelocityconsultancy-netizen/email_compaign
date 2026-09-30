@@ -2,7 +2,7 @@ from django.forms import models
 from django.shortcuts import render
 from django.views import View
 from rest_framework.response import Response
-from rest_framework import viewsets, status
+from rest_framework import generics, viewsets, status
 
 from rest_framework.decorators import action
 
@@ -20,6 +20,7 @@ from rest_framework import status
 import json
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -61,15 +62,8 @@ class LeadCSVImportView(APIView):
             reader = csv.DictReader(decoded_file)
 
             csv_columns = set(reader.fieldnames or [])
-            required_columns = {
-                "name",
-                "company",
-                "source",
-                "status",
-            }
+            required_columns = {"enquiry_for", "enquiry_date", "lead_received_by", "source"}
             missing_columns = required_columns - csv_columns
-            if not {"email", "phone"}.intersection(csv_columns):
-                missing_columns.add("email or phone")
 
             if missing_columns:
                 return Response(
@@ -85,63 +79,30 @@ class LeadCSVImportView(APIView):
             duplicates = 0
             invalid = 0
 
-            valid_sources = dict(Lead.SOURCE_CHOICES)
-            valid_statuses = dict(Lead.STATUS_CHOICES)
-
             for row in reader:
                 total_rows += 1
+                received_user = self.resolve_user(row.get("lead_received_by"))
+                assigned_user = self.resolve_user(row.get("lead_assign_to")) if row.get("lead_assign_to") else None
+                if not received_user or (row.get("lead_assign_to") and not assigned_user):
+                    invalid += 1
+                    continue
 
-                name = (row.get("name") or "").strip()
-                email = (row.get("email") or "").strip().lower()
-                company = (row.get("company") or "").strip()
-                phone = (row.get("phone") or "").strip()
-                channel = (row.get("channel") or "").strip().lower()
-                source = (row.get("source") or "").strip()
-                lead_status = (row.get("status") or "").strip()
-                whatsapp_opt_in = (row.get("whatsapp_opt_in") or "").strip().lower() in {
-                    "1", "true", "yes", "y"
+                data = {
+                    "enquiry_for": (row.get("enquiry_for") or "").strip().upper(),
+                    "enquiry_date": (row.get("enquiry_date") or "").strip(),
+                    "lead_received_by": received_user.pk,
+                    "lead_assign_to": assigned_user.pk if assigned_user else None,
+                    "source": (row.get("source") or "").strip().upper(),
+                    "status": (row.get("status") or "NEW").strip().upper(),
+                    "followup_date": (row.get("followup_date") or "").strip() or None,
+                    "followup_remarks": (row.get("followup_remarks") or "").strip(),
+                    "is_opportunity": (row.get("is_opportunity") or "").strip().lower() in {"1", "true", "yes", "y"},
                 }
-
-                # Basic validation
-                if not name or not company or (not email and not phone):
+                serializer = LeadSerializer(data=data)
+                if not serializer.is_valid():
                     invalid += 1
                     continue
-
-                if channel not in {"", Channel.EMAIL, Channel.WHATSAPP}:
-                    invalid += 1
-                    continue
-                if channel == Channel.EMAIL and not email:
-                    invalid += 1
-                    continue
-                if channel == Channel.WHATSAPP and not phone:
-                    invalid += 1
-                    continue
-
-                # Validate source
-                if source not in valid_sources:
-                    invalid += 1
-                    continue
-
-                # Validate status
-                if lead_status not in valid_statuses:
-                    invalid += 1
-                    continue
-
-                # Duplicate email
-                if email and Lead.objects.filter(email=email).exists():
-                    duplicates += 1
-                    continue
-
-                Lead.objects.create(
-                    name=name,
-                    email=email,
-                    company=company,
-                    phone=phone,
-                    whatsapp_opt_in=whatsapp_opt_in,
-                    source=source,
-                    status=lead_status,
-                )
-
+                serializer.save()
                 imported += 1
 
             return Response(
@@ -160,13 +121,25 @@ class LeadCSVImportView(APIView):
                 {"error": "CSV must be UTF-8 encoded."},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+    @staticmethod
+    def resolve_user(identifier):
+        if not identifier:
+            return None
+        users = get_user_model().objects.filter(is_active=True)
+        value = identifier.strip()
+        if value.isdigit():
+            return users.filter(pk=int(value)).first()
+        return users.filter(username=value).first()
                 
                 
 
 class LeadListView(APIView):
 
     def get(self, request):
-        leads = Lead.objects.all().order_by("-created_at")
+        leads = Lead.objects.filter(is_active=True).select_related(
+            "lead_received_by", "lead_assign_to"
+        ).order_by("-enquiry_date", "-created_at")
         serializer = LeadSerializer(leads, many=True)
 
         return Response(
@@ -176,6 +149,35 @@ class LeadListView(APIView):
             },
             status=status.HTTP_200_OK
         )
+
+    def post(self, request):
+        serializer = LeadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class LeadDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Lead.objects.filter(is_active=True).select_related(
+        "lead_received_by", "lead_assign_to"
+    )
+    serializer_class = LeadSerializer
+
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save(update_fields=['is_active', 'updated_at'])
+
+
+class LeadUserListView(APIView):
+    def get(self, request):
+        users = get_user_model().objects.filter(is_active=True).order_by("first_name", "last_name", "username")
+        return Response([
+            {
+                "id": user.pk,
+                "name": user.get_full_name() or user.get_username(),
+            }
+            for user in users
+        ])
 
 
 class EmailLogListView(APIView):

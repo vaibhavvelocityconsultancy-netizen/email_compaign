@@ -98,6 +98,13 @@ class Command(BaseCommand):
             for batch_lead in batch_leads:
 
                 try:
+                    if not batch_lead.email:
+                        self.stdout.write(
+                            self.style.WARNING(
+                                f"SKIP lead {batch_lead.lead_id}: no recipient email is available."
+                            )
+                        )
+                        continue
 
                     # current_step starts from 0
                     current_step = batch_lead.current_step
@@ -178,11 +185,9 @@ class Command(BaseCommand):
 
                     lead = batch_lead.lead
 
-                    company_name = lead.company or ""
-
-                    contact_name = lead.name or ""
-
-                    enquiry_for = ""
+                    company_name = ""
+                    contact_name = lead.lead_assign_to.get_full_name() if lead.lead_assign_to else ""
+                    enquiry_for = lead.get_enquiry_for_display()
 
                     # --------------------------------
                     # REPLACE PLACEHOLDERS
