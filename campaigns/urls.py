@@ -3,11 +3,15 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     BatchViewSet,
+    EmailLogListView,
     EmailSequenceStepViewSet,
     EmailSequenceViewSet,
     EmailTemplateViewSet,
     LeadCSVImportView,
     LeadListView,
+    mailgun_inbound_webhook,
+    mailgun_webhook,
+    whatsapp_webhook,
 )
 
 router = DefaultRouter()
@@ -26,6 +30,26 @@ urlpatterns = [
         "leads/",
         LeadListView.as_view(),
         name="lead-list",
+    ),
+    path(
+        "email-logs/",
+        EmailLogListView.as_view(),
+        name="email-log-list",
+    ),
+      path(
+        "webhooks/mailgun/",
+        mailgun_webhook,
+        name="mailgun-webhook"
+    ),
+      path(
+        "webhooks/mailgun/inbound/",
+        mailgun_inbound_webhook,
+        name="mailgun-inbound-webhook"
+    ),
+    path(
+        "webhooks/whatsapp/",
+        whatsapp_webhook,
+        name="whatsapp-webhook",
     ),
     path("", include(router.urls)),
 ]
