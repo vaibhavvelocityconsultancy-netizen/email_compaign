@@ -296,14 +296,19 @@ class Command(BaseCommand):
                         settings.EMAIL_HOST_USER
                     )
 
+                    reply_to_email = getattr(
+                        settings,
+                        "MAILGUN_REPLY_TO",
+                        from_email
+                    )
+
                     msg = EmailMultiAlternatives(
                         subject=subject,
                         body=body,
                         from_email=from_email,
                         to=[batch_lead.email],
-                        reply_to=[from_email],
-                    )
-
+                        reply_to=[reply_to_email],
+                )
                     msg.content_subtype = "html"
 
                     # Needed for inline logo
@@ -358,6 +363,7 @@ class Command(BaseCommand):
                     # --------------------------------
 
                     msg.send()
+                    mailgun_message_id = msg.message().get("Message-ID", "")
 
                     # Save to IMAP Sent
                     save_to_sent(msg)
@@ -372,7 +378,8 @@ class Command(BaseCommand):
                         step_number=step.step_number,
                         to_email=batch_lead.email,
                         subject=subject,
-                        status=EmailLog.Status.SENT,
+                        status=EmailLog.Status.ACCEPTED,
+                        mailgun_message_id=mailgun_message_id,
                     )
 
                     # --------------------------------

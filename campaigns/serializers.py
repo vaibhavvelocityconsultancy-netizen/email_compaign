@@ -1,5 +1,6 @@
+from django.db import transaction
 from rest_framework import serializers
-from .models import Batch, BatchLead, EmailSequence, EmailSequenceStep, EmailTemplate, Lead
+from .models import Batch, BatchLead, Channel, MessageLog, MessageTemplate, Sequence, SequenceStep, Lead
 
 
 class LeadSerializer(serializers.ModelSerializer):
@@ -8,38 +9,35 @@ class LeadSerializer(serializers.ModelSerializer):
         fields = "__all__"
         
         
-class EmailTemplateSerializer(serializers.ModelSerializer):
+class MessageTemplateSerializer(serializers.ModelSerializer):
     class Meta:
-        model = EmailTemplate
+        model = MessageTemplate
         fields = [
             'id',
+            'channel',
             'name',
             'subject',
             'body',
             'signature',
             'logo',
             'attachment',
+            'wa_template_name',
+            'wa_language',
+            'wa_status',
             'created_at',
             'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
         
         
-class EmailSequenceSerializer(serializers.ModelSerializer): 
+class SequenceStepSerializer(serializers.ModelSerializer):
+    sequence = serializers.PrimaryKeyRelatedField(
+        queryset=Sequence.objects.all(),
+        required=False,
+    )
+
     class Meta:
-        model = EmailSequence
-        fields = [
-            'id',
-            'name',
-            'description',
-            'created_at',
-        ]
-        read_only_fields = ['id', 'created_at']
-        
-        
-class EmailSequenceStepSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = EmailSequenceStep
+        model = SequenceStep
         fields = [
             'id',
             'sequence',
@@ -49,19 +47,121 @@ class EmailSequenceStepSerializer(serializers.ModelSerializer):
             'delay_minutes',
         ]
         read_only_fields = ['id']
+
+    def validate(self, attrs):
+        sequence = attrs.get('sequence', getattr(self.instance, 'sequence', None))
+        template = attrs.get('template', getattr(self.instance, 'template', None))
+        if sequence and template and sequence.channel != template.channel:
+            raise serializers.ValidationError({'template': 'Template channel must match sequence channel.'})
+        return attrs
+
+
+class NestedSequenceStepSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SequenceStep
+        fields = [
+            'id',
+            'step_number',
+            'template',
+            'delay_days',
+            'delay_minutes',
+        ]
+        read_only_fields = ['id']
+        validators = []
+
+
+class SequenceSerializer(serializers.ModelSerializer):
+    steps = NestedSequenceStepSerializer(many=True, required=False)
+
+    class Meta:
+        model = Sequence
+        fields = [
+            'id',
+            'channel',
+            'name',
+            'description',
+            'created_at',
+            'steps',
+        ]
+        read_only_fields = ['id', 'created_at']
+
+    def validate(self, attrs):
+        channel = attrs.get('channel', getattr(self.instance, 'channel', Channel.EMAIL))
+        steps = attrs.get('steps')
+        if steps is None and self.instance:
+            templates = [step.template for step in self.instance.steps.select_related('template')]
+        else:
+            templates = [step['template'] for step in (steps or [])]
+        for template in templates:
+            if template.channel != channel:
+                raise serializers.ValidationError({'steps': 'Every template channel must match the sequence channel.'})
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        steps_data = validated_data.pop('steps', [])
+        sequence = super().create(validated_data)
+        for step_data in steps_data:
+            step_data.pop('sequence', None)
+            SequenceStep.objects.create(sequence=sequence, **step_data)
+        return sequence
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        steps_data = validated_data.pop('steps', None)
+        sequence = super().update(instance, validated_data)
+        if steps_data is not None:
+            sequence.steps.all().delete()
+            for step_data in steps_data:
+                step_data.pop('sequence', None)
+                SequenceStep.objects.create(sequence=sequence, **step_data)
+        return sequence
         
 
 class BatchSerializer(serializers.ModelSerializer):
+    lead_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Lead.objects.all(),
+        many=True,
+        required=False,
+        write_only=True,
+    )
+
     class Meta:
         model = Batch
         fields = [
             'id',
             'name',
             'sequence',
+            'lead_ids',
+            'enquiry_date_from',
+            'enquiry_date_to',
             'status',
             'created_at',
         ]
         read_only_fields = ['id', 'created_at']
+
+    @transaction.atomic
+    def create(self, validated_data):
+        leads = validated_data.pop('lead_ids', [])
+        batch = super().create(validated_data)
+        BatchLead.objects.bulk_create([
+            BatchLead(batch=batch, lead=lead, email=lead.email or '', phone=lead.phone)
+            for lead in leads
+        ])
+        return batch
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        leads = validated_data.pop('lead_ids', None)
+        batch = super().update(instance, validated_data)
+        if leads is not None:
+            existing_ids = set(batch.batch_leads.values_list('lead_id', flat=True))
+            BatchLead.objects.bulk_create([
+                BatchLead(batch=batch, lead=lead, email=lead.email or '', phone=lead.phone)
+                for lead in leads
+                if lead.pk not in existing_ids
+            ])
+        return batch
 
 
 class BatchLeadSerializer(serializers.ModelSerializer):
@@ -72,6 +172,7 @@ class BatchLeadSerializer(serializers.ModelSerializer):
             'batch',
             'lead',
             'email',
+            'phone',
             'current_step',
             'replied',
             'replied_at',
@@ -80,3 +181,25 @@ class BatchLeadSerializer(serializers.ModelSerializer):
             'last_email_sent_at',
         ]
         read_only_fields = ['id']
+
+
+class MessageLogSerializer(serializers.ModelSerializer):
+    batch = serializers.IntegerField(source='batch_lead.batch_id', read_only=True)
+    lead = serializers.IntegerField(source='batch_lead.lead_id', read_only=True)
+    template_name = serializers.CharField(source='template.name', read_only=True, allow_null=True)
+
+    class Meta:
+        model = MessageLog
+        fields = [
+            'id',
+            'batch',
+            'lead',
+            'step_number',
+            'channel',
+            'to_address',
+            'status',
+            'sent_at',
+            'subject',
+            'template_name',
+            'error',
+        ]
