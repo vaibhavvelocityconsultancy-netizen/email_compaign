@@ -1,4 +1,5 @@
 from django.core.exceptions import ValidationError
+from django.conf import settings
 from django.db import models
 
 # Create your models here.
@@ -8,8 +9,9 @@ class Channel(models.TextChoices):
     WHATSAPP = 'whatsapp', 'WhatsApp'
 
 class Lead(models.Model):
-    ENQUIRY_FOR=[
-        
+    ENQUIRY_FOR_CHOICES = [
+        ('LEAD', 'Lead'),
+        ('CLIENT', 'Client'),
     ]
     SOURCE_CHOICES = [
         ('WEBSITE',         'Website'),
@@ -30,31 +32,33 @@ class Lead(models.Model):
         ('HOT',    'Hot'),
         ('COLD',   'Cold'),
     ]
-
-    name = models.CharField(max_length=100)
-    email = models.EmailField(unique=True, null=True, blank=True)
-    company = models.CharField(max_length=100)
-    phone = models.CharField(max_length=20, blank=True)
-    whatsapp_opt_in = models.BooleanField(default=False)
-    source = models.CharField(
-    max_length=30,
-    choices=SOURCE_CHOICES,
-    default='OTHER'
-    )
-
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='NEW'
-    )
     
-    is_active = models.BooleanField(default=True)
     
+    # Basic info
+    sr_no = models.AutoField(primary_key=True)
+    # company = models.ForeignKey(Company, on_delete=models.PROTECT, related_name='leads')
+    enquiry_for = models.CharField(max_length=20, choices=ENQUIRY_FOR_CHOICES)
+    
+    # Enquirey details
+    enquiry_date = models.DateField()
+    lead_received_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='received_enquiries')
+    lead_assign_to = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_leads')
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='NEW')
+    followup_date = models.DateField(null=True, blank=True)
+    followup_remarks = models.TextField(blank=True)
+
+    # Audit
+    tracker = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+    is_active = models.BooleanField(default=True)
+    
+    is_opportunity = models.BooleanField(default=False)
+    followup_history = models.JSONField(default=list, blank=True)
+    
     def __str__(self):
-        return self.name
+        return f"Enquiry #{self.sr_no}"
     
     
 
@@ -142,7 +146,7 @@ class BatchLead(models.Model):
         unique_together = ['batch', 'lead']
 
     def __str__(self):
-        return f"{self.batch.name} - {self.lead.company}"
+        return f"{self.batch.name} - {self.lead}"
 
 
 class MessageLog(models.Model):
