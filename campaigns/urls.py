@@ -22,6 +22,10 @@ from .views import (
     OpportunityListCreateView,
     OpportunityModuleDetailView,
     OpportunityModuleListCreateView,
+    ConvertOpportunityToQuotationView,
+    QuotationDetailView,
+    QuotationListCreateView,
+    GenerateFinalOfferView,
     StateViewSet,
     mailgun_inbound_webhook,
     mailgun_webhook,
@@ -94,6 +98,26 @@ urlpatterns = [
         "opportunities/<int:opportunity_id>/modules/<int:pk>/",
         OpportunityModuleDetailView.as_view(),
         name="opportunity-module-detail",
+    ),
+    path(
+        "opportunities/<int:pk>/convert-to-quotation/",
+        ConvertOpportunityToQuotationView.as_view(),
+        name="opportunity-convert-to-quotation",
+    ),
+    path(
+        "quotations/",
+        QuotationListCreateView.as_view(),
+        name="quotation-list",
+    ),
+    path(
+        "quotations/<int:pk>/",
+        QuotationDetailView.as_view(),
+        name="quotation-detail",
+    ),
+    path(
+        "quotations/<int:pk>/generate-final-offer/",
+        GenerateFinalOfferView.as_view(),
+        name="quotation-generate-final-offer",
     ),
     path(
         "email-logs/",
