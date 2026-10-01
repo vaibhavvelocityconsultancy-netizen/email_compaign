@@ -1,7 +1,8 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from .models import Batch, BatchLead, Channel, EmailLog, MessageLog, MessageTemplate, Sequence, Lead
+from .models import Batch, BatchLead, Channel, City, Company, CompanyContact, Country, Lead, MessageTemplate, Sequence, State
+from .serializers import LeadSerializer
 
 
 class MessageLogListViewTests(TestCase):
@@ -40,6 +41,39 @@ class MessageLogListViewTests(TestCase):
 		self.assertEqual(response.data[0]["lead"], lead.id)
 		self.assertEqual(response.data[0]["template_name"], template.name)
 		self.assertEqual(response.data[0]["channel"], Channel.EMAIL)
+
+
+class LeadSerializerTests(TestCase):
+    def test_company_master_names_are_resolved_to_model_instances(self):
+        country = Country.objects.create(name="India")
+        state = State.objects.create(country=country, name="Gujarat")
+        city = City.objects.create(state=state, name="Ahemdabad")
+
+        lead = LeadSerializer().create(
+            {
+                "company_name": "Acme Labs",
+                "company_address": "MG Road",
+                "company_city": "Ahemdabad",
+                "company_state": "Gujarat",
+                "company_country": "India",
+                "company_pincode": "380001",
+                "company_gst_number": "GST-123",
+                "contact_name": "Nitin Shah",
+                "contact_designation": "Manager",
+                "contact_mobile": "9999999999",
+                "contact_email": "nitin@example.com",
+                "enquiry_for": "LEAD",
+                "enquiry_date": "2026-09-30",
+                "source": "WEBSITE",
+                "status": "NEW",
+            }
+        )
+
+        self.assertEqual(lead.company.name, "Acme Labs")
+        self.assertEqual(lead.company.city, city)
+        self.assertEqual(lead.company.state, state)
+        self.assertEqual(lead.company.country, country)
+        self.assertTrue(CompanyContact.objects.filter(company=lead.company, name="Nitin Shah").exists())
 
 
 class CampaignSequenceAPITests(TestCase):

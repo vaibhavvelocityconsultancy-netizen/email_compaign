@@ -1,5 +1,6 @@
 from django.forms import models
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
+from django.db.models import Count, Q
 from django.views import View
 from rest_framework.response import Response
 from rest_framework import generics, viewsets, status
@@ -29,18 +30,97 @@ from django.views.decorators.csrf import csrf_exempt
 from campaigns.serializers import (
     BatchLeadSerializer,
     BatchSerializer,
+    CitySerializer,
+    CompanyContactSerializer,
+    CompanySerializer,
+    CountrySerializer,
     MessageLogSerializer,
     SequenceSerializer,
     SequenceStepSerializer,
+    StateSerializer,
     MessageTemplateSerializer,
     LeadSerializer,
 )
 
-from .models import Batch, BatchLead, Channel, MessageLog, Sequence, SequenceStep, MessageTemplate, Lead
+from .models import Batch, BatchLead, Channel, City, Company, CompanyContact, Country, MessageLog, Sequence, SequenceStep, State, MessageTemplate, Lead
+
+# ------------------------------------- masters ----------------------
+
+
+# company 
+
+class CountryViewSet(viewsets.ModelViewSet):
+    queryset = Country.objects.all()
+    serializer_class = CountrySerializer
+
+
+class StateViewSet(viewsets.ModelViewSet):
+    queryset = State.objects.all()
+    serializer_class = StateSerializer
+
+
+class CityViewSet(viewsets.ModelViewSet):
+    queryset = City.objects.all()
+    serializer_class = CitySerializer
+
+
+class CompanyListView(APIView):
+    def get(self, request):
+        companies = Company.objects.filter(is_active=True).annotate(
+            contacts_count=Count("contacts", filter=Q(contacts__is_active=True))
+        ).order_by("name")
+        return Response({
+            "count": companies.count(),
+            "results": CompanySerializer(companies, many=True).data,
+        })
+
+    def post(self, request):
+        serializer = CompanySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        company = serializer.save()
+        company.contacts_count = 0
+        return Response(CompanySerializer(company).data, status=status.HTTP_201_CREATED)
+
+
+class CompanyDetailView(generics.RetrieveUpdateAPIView):
+    queryset = Company.objects.filter(is_active=True).annotate(
+        contacts_count=Count("contacts", filter=Q(contacts__is_active=True))
+    )
+    serializer_class = CompanySerializer
+
+
+class CompanyContactListCreateView(APIView):
+    def get(self, request, company_id):
+        company = get_object_or_404(Company, pk=company_id, is_active=True)
+        contacts = company.contacts.filter(is_active=True).order_by("-is_primary", "name")
+        return Response(CompanyContactSerializer(contacts, many=True).data)
+
+    def post(self, request, company_id):
+        company = get_object_or_404(Company, pk=company_id, is_active=True)
+        serializer = CompanyContactSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(
+            CompanyContactSerializer(serializer.save(company=company)).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class CompanyContactDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = CompanyContactSerializer
+
+    def get_queryset(self):
+        return CompanyContact.objects.filter(
+            company_id=self.kwargs["company_id"],
+            company__is_active=True,
+            is_active=True,
+        )
+
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save(update_fields=["is_active"])
 
 
 class LeadCSVImportView(APIView):
-
     def post(self, request):
         csv_file = request.FILES.get("file")
 
@@ -123,6 +203,21 @@ class LeadCSVImportView(APIView):
                 {"error": "CSV must be UTF-8 encoded."},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+class LeadOptionsView(APIView):
+    def get(self, request):
+        def to_options(choices):
+            return [{"value": value, "label": label} for value, label in choices]
+
+        return Response(
+            {
+                "enquiry_for": to_options(Lead.ENQUIRY_FOR_CHOICES),
+                "source": to_options(Lead.SOURCE_CHOICES),
+                "status": to_options(Lead.STATUS_CHOICES),
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 class LeadListView(APIView):
 
@@ -229,6 +324,23 @@ class BatchViewSet(viewsets.ModelViewSet):
 
 # webhook
 
+def _is_valid_mailgun_signature(signature_data):
+    signing_key = getattr(settings, "ANYMAIL", {}).get("MAILGUN_WEBHOOK_SIGNING_KEY", "")
+    timestamp = str(signature_data.get("timestamp", ""))
+    token = str(signature_data.get("token", ""))
+    signature = str(signature_data.get("signature", ""))
+
+    if not signing_key or not timestamp or not token or not signature:
+        return False
+
+    expected_signature = hmac.new(
+        signing_key.encode(),
+        f"{timestamp}{token}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(signature, expected_signature)
+
+
 @csrf_exempt
 def mailgun_webhook(request):
 
@@ -240,6 +352,8 @@ def mailgun_webhook(request):
 
     try:
         data = json.loads(request.body)
+        if not _is_valid_mailgun_signature(data.get("signature", {})):
+            return JsonResponse({"error": "Webhook signature is invalid."}, status=403)
 
         event_data = data.get("event-data", {})
 
@@ -340,6 +454,14 @@ def mailgun_inbound_webhook(request):
             {"error": "POST method required"},
             status=405
         )
+
+    signature_data = {
+        "timestamp": request.POST.get("timestamp", ""),
+        "token": request.POST.get("token", ""),
+        "signature": request.POST.get("signature", ""),
+    }
+    if not _is_valid_mailgun_signature(signature_data):
+        return JsonResponse({"error": "Webhook signature is invalid."}, status=403)
 
     try:
         sender = request.POST.get("sender", "").strip().lower()
