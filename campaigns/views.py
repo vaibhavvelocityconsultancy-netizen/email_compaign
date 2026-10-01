@@ -20,7 +20,6 @@ from rest_framework import status
 import json
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -62,7 +61,7 @@ class LeadCSVImportView(APIView):
             reader = csv.DictReader(decoded_file)
 
             csv_columns = set(reader.fieldnames or [])
-            required_columns = {"enquiry_for", "enquiry_date", "lead_received_by", "source"}
+            required_columns = {"company_name", "enquiry_for", "enquiry_date", "source"}
             missing_columns = required_columns - csv_columns
 
             if missing_columns:
@@ -81,17 +80,20 @@ class LeadCSVImportView(APIView):
 
             for row in reader:
                 total_rows += 1
-                received_user = self.resolve_user(row.get("lead_received_by"))
-                assigned_user = self.resolve_user(row.get("lead_assign_to")) if row.get("lead_assign_to") else None
-                if not received_user or (row.get("lead_assign_to") and not assigned_user):
-                    invalid += 1
-                    continue
-
                 data = {
+                    "company_name": (row.get("company_name") or "").strip(),
+                    "company_address": (row.get("company_address") or "").strip(),
+                    "company_city": (row.get("company_city") or "").strip(),
+                    "company_state": (row.get("company_state") or "").strip(),
+                    "company_pincode": (row.get("company_pincode") or "").strip(),
+                    "company_country": (row.get("company_country") or "India").strip(),
+                    "company_gst_number": (row.get("company_gst_number") or "").strip(),
+                    "contact_name": (row.get("contact_name") or "").strip(),
+                    "contact_designation": (row.get("contact_designation") or "").strip(),
+                    "contact_mobile": (row.get("contact_mobile") or "").strip(),
+                    "contact_email": (row.get("contact_email") or "").strip(),
                     "enquiry_for": (row.get("enquiry_for") or "").strip().upper(),
                     "enquiry_date": (row.get("enquiry_date") or "").strip(),
-                    "lead_received_by": received_user.pk,
-                    "lead_assign_to": assigned_user.pk if assigned_user else None,
                     "source": (row.get("source") or "").strip().upper(),
                     "status": (row.get("status") or "NEW").strip().upper(),
                     "followup_date": (row.get("followup_date") or "").strip() or None,
@@ -122,23 +124,11 @@ class LeadCSVImportView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-    @staticmethod
-    def resolve_user(identifier):
-        if not identifier:
-            return None
-        users = get_user_model().objects.filter(is_active=True)
-        value = identifier.strip()
-        if value.isdigit():
-            return users.filter(pk=int(value)).first()
-        return users.filter(username=value).first()
-                
-                
-
 class LeadListView(APIView):
 
     def get(self, request):
         leads = Lead.objects.filter(is_active=True).select_related(
-            "lead_received_by", "lead_assign_to"
+            "company", "contact"
         ).order_by("-enquiry_date", "-created_at")
         serializer = LeadSerializer(leads, many=True)
 
@@ -158,26 +148,12 @@ class LeadListView(APIView):
 
 
 class LeadDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Lead.objects.filter(is_active=True).select_related(
-        "lead_received_by", "lead_assign_to"
-    )
+    queryset = Lead.objects.filter(is_active=True).select_related("company", "contact")
     serializer_class = LeadSerializer
 
     def perform_destroy(self, instance):
         instance.is_active = False
         instance.save(update_fields=['is_active', 'updated_at'])
-
-
-class LeadUserListView(APIView):
-    def get(self, request):
-        users = get_user_model().objects.filter(is_active=True).order_by("first_name", "last_name", "username")
-        return Response([
-            {
-                "id": user.pk,
-                "name": user.get_full_name() or user.get_username(),
-            }
-            for user in users
-        ])
 
 
 class EmailLogListView(APIView):

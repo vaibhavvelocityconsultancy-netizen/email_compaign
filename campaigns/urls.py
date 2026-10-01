@@ -10,7 +10,6 @@ from .views import (
     LeadCSVImportView,
     LeadDetailView,
     LeadListView,
-    LeadUserListView,
     mailgun_inbound_webhook,
     mailgun_webhook,
     whatsapp_webhook,
@@ -32,11 +31,6 @@ urlpatterns = [
         "leads/",
         LeadListView.as_view(),
         name="lead-list",
-    ),
-    path(
-        "lead-users/",
-        LeadUserListView.as_view(),
-        name="lead-users",
     ),
     path(
         "leads/<int:pk>/",

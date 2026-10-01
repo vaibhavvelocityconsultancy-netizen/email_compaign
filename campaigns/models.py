@@ -1,8 +1,43 @@
 from django.core.exceptions import ValidationError
-from django.conf import settings
 from django.db import models
 
 # Create your models here.
+class Company(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    name = models.CharField(max_length=200)
+    is_contact = models.BooleanField(default=False)
+    address = models.TextField(blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    state = models.CharField(max_length=100, blank=True)
+    pincode = models.CharField(max_length=10, blank=True)
+    country = models.CharField(max_length=100, default='India')
+    gst_number = models.CharField(max_length=50, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+
+class CompanyContact(models.Model):
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='contacts')
+    name = models.CharField(max_length=100)
+    designation = models.CharField(max_length=100, blank=True)
+    phone = models.CharField(max_length=20, blank=True)
+    email = models.EmailField(blank=True)
+    is_primary = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if not self.company.is_contact:
+            self.company.is_contact = True
+            self.company.save(update_fields=['is_contact'])
+
+    def __str__(self):
+        return f"{self.name} - {self.company.name}"
 
 class Channel(models.TextChoices):
     EMAIL = 'email', 'Email'
@@ -36,13 +71,14 @@ class Lead(models.Model):
     
     # Basic info
     sr_no = models.AutoField(primary_key=True)
-    # company = models.ForeignKey(Company, on_delete=models.PROTECT, related_name='leads')
+    company = models.ForeignKey(Company, on_delete=models.PROTECT, related_name='leads', null=True, blank=True)
+    contact = models.ForeignKey(CompanyContact, on_delete=models.SET_NULL, related_name='leads', null=True, blank=True)
     enquiry_for = models.CharField(max_length=20, choices=ENQUIRY_FOR_CHOICES)
     
     # Enquirey details
     enquiry_date = models.DateField()
-    lead_received_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='received_enquiries')
-    lead_assign_to = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_leads')
+    # lead_received_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='received_enquiries')
+    # lead_assign_to = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_leads')
     source = models.CharField(max_length=20, choices=SOURCE_CHOICES)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='NEW')
     followup_date = models.DateField(null=True, blank=True)
