@@ -5,7 +5,7 @@ from django.views import View
 from rest_framework.response import Response
 from rest_framework import generics, viewsets, status
 
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view
 
 # Create your views here.
 
@@ -40,9 +40,11 @@ from campaigns.serializers import (
     StateSerializer,
     MessageTemplateSerializer,
     LeadSerializer,
+    OpportunityCreateSerializer,
+    OpportunityModuleSerializer,
 )
 
-from .models import Batch, BatchLead, Channel, City, Company, CompanyContact, Country, MessageLog, Sequence, SequenceStep, State, MessageTemplate, Lead
+from .models import Batch, BatchLead, Channel, City, Company, CompanyContact, Country, MessageLog, Opportunity, OpportunityModule, Sequence, SequenceStep, State, MessageTemplate, Lead
 
 # ------------------------------------- masters ----------------------
 
@@ -222,7 +224,7 @@ class LeadOptionsView(APIView):
 class LeadListView(APIView):
 
     def get(self, request):
-        leads = Lead.objects.filter(is_active=True).select_related(
+        leads = Lead.objects.filter(is_active=True, is_opportunity=False).select_related(
             "company", "contact"
         ).order_by("-enquiry_date", "-created_at")
         serializer = LeadSerializer(leads, many=True)
@@ -249,6 +251,57 @@ class LeadDetailView(generics.RetrieveUpdateDestroyAPIView):
     def perform_destroy(self, instance):
         instance.is_active = False
         instance.save(update_fields=['is_active', 'updated_at'])
+
+
+class OpportunityListCreateView(generics.ListCreateAPIView):
+    queryset = Opportunity.objects.filter(is_active=True).prefetch_related("modules")
+    serializer_class = OpportunityCreateSerializer
+
+
+class OpportunityDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Opportunity.objects.filter(is_active=True).prefetch_related("modules")
+    serializer_class = OpportunityCreateSerializer 
+
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save(update_fields=["is_active", "updated_at"])
+
+
+class OpportunityModuleListCreateView(generics.ListCreateAPIView):
+    serializer_class = OpportunityModuleSerializer
+
+    def get_opportunity(self):
+        return get_object_or_404(
+            Opportunity,
+            pk=self.kwargs["opportunity_id"],
+            is_active=True,
+        )
+
+    def get_queryset(self):
+        return OpportunityModule.objects.filter(
+            opportunity_id=self.kwargs["opportunity_id"],
+            opportunity__is_active=True,
+        ).order_by("module_number")
+
+    def perform_create(self, serializer):
+        opportunity = self.get_opportunity()
+        module_number = serializer.validated_data.get("module_number")
+        if module_number is None:
+            last_number = opportunity.modules.order_by("-module_number").values_list(
+                "module_number", flat=True
+            ).first()
+            module_number = (last_number or 0) + 1
+        serializer.save(opportunity=opportunity, module_number=module_number)
+
+
+class OpportunityModuleDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = OpportunityModuleSerializer
+
+    def get_queryset(self):
+        return OpportunityModule.objects.filter(
+            opportunity_id=self.kwargs["opportunity_id"],
+            opportunity__is_active=True,
+        )
 
 
 class EmailLogListView(APIView):
@@ -619,3 +672,47 @@ def whatsapp_webhook(request):
                 replied += 1
 
     return JsonResponse({"status": "processed", "updated": updated, "replied": replied})
+  
+  
+
+# convert to opportunity
+
+@api_view(['POST'])
+def lead_convert_to_opportunity(request, lead_id):
+    lead = get_object_or_404(
+        Lead,
+        pk=lead_id,
+        is_active=True
+    )
+
+    if lead.is_opportunity:
+        return Response(
+            {
+                'error': 'Lead is already converted to an opportunity.'
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    opportunity = Opportunity.objects.create(
+        lead=lead,
+        company=lead.company,
+        source=lead.source,
+        status='PROSPECTING',
+        is_converted_from_lead=True,
+        converted_at=timezone.now(),
+        converted_by=request.user if request.user.is_authenticated else None,
+    )
+
+    lead.is_opportunity = True
+    lead.save(update_fields=['is_opportunity', 'updated_at'])
+
+    return Response(
+        {
+            'message': 'Lead converted to opportunity successfully',
+            'opportunity_id': opportunity.id,
+            'is_opportunity': lead.is_opportunity,
+            'is_converted_from_lead': opportunity.is_converted_from_lead,
+            'company_name': lead.company.name,
+        },
+        status=status.HTTP_201_CREATED
+    )

@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers
 from .models import (
     Batch,
@@ -10,13 +11,15 @@ from .models import (
     Country,
     MessageLog,
     MessageTemplate,
+    Opportunity,
+    OpportunityModule,
     Sequence,
     SequenceStep,
     State,
     Lead,
 )
 
-
+# -------------------Masters - Country, State, City, Company, CompanyContact Serializer -------------------
 class CountrySerializer(serializers.ModelSerializer):
     code = serializers.CharField(
         required=False, allow_blank=True, allow_null=True, max_length=10
@@ -98,6 +101,9 @@ class CompanyContactSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "company", "is_active", "created_at"]
 
 
+# ---------------- masters serializer ends -------------------
+
+# ------------------- Lead Serializer -------------------
 class LeadSerializer(serializers.ModelSerializer):
     company_name = serializers.CharField(write_only=True, max_length=200)
     company_address = serializers.CharField(
@@ -313,7 +319,9 @@ class LeadSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         company = self._save_company(validated_data)
         contact = self._save_contact(validated_data, company)
-        return Lead.objects.create(company=company, contact=contact, **validated_data)
+        lead = Lead.objects.create(company=company, contact=contact, **validated_data)
+        self._sync_opportunity(lead)
+        return lead
 
     @transaction.atomic
     def update(self, instance, validated_data):
@@ -321,9 +329,40 @@ class LeadSerializer(serializers.ModelSerializer):
         contact = self._save_contact(validated_data, company, instance)
         instance.company = company
         instance.contact = contact
-        return super().update(instance, validated_data)
+        lead = super().update(instance, validated_data)
+        self._sync_opportunity(lead)
+        return lead
 
+    @staticmethod
+    def _sync_opportunity(lead):
+        if not lead.is_opportunity:
+            if hasattr(lead, "opportunity"):
+                lead.opportunity.is_active = False
+                lead.opportunity.save(update_fields=["is_active", "updated_at"])
+            return
 
+        opportunity, created = Opportunity.objects.get_or_create(
+            lead=lead,
+            defaults={
+                "company": lead.company,
+                "source": lead.source,
+                "expected_close_date": lead.followup_date,
+                "is_converted_from_lead": True,
+                "converted_at": timezone.now(),
+            },
+        )
+        if not created:
+            opportunity.company = lead.company
+            opportunity.source = lead.source
+            opportunity.expected_close_date = lead.followup_date
+            opportunity.is_active = True
+            opportunity.save(update_fields=["company", "source", "expected_close_date", "is_active", "updated_at"])
+      
+# ------------ lead serializer ends -----------------------------
+      
+      
+
+# -------- message template serializer ----------------------------
 class MessageTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = MessageTemplate
@@ -540,3 +579,183 @@ class MessageLogSerializer(serializers.ModelSerializer):
             "template_name",
             "error",
         ]
+
+# ----------- email & whatsapp compaign ends -----
+
+# Opportunity Module Serializer
+class OpportunityModuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OpportunityModule
+        fields = [
+            'id',
+            'opportunity',
+            'module_number',
+            'module_name',
+            'description',
+            'requirements',
+            'estimated_cost',
+            'estimated_days',
+            'priority',
+            'remarks',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'opportunity', 'created_at', 'updated_at']
+        extra_kwargs = {'module_number': {'required': False}}
+
+    def validate_module_number(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError('Module number must be positive.')
+        return value
+
+    def validate_module_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Module name cannot be empty.')
+        return value
+
+    def validate_estimated_cost(self, value):
+        if value is not None and value < 0:
+            raise serializers.ValidationError('Estimated cost cannot be negative.')
+        return value
+
+    def validate_estimated_days(self, value):
+        if value is not None and value < 0:
+            raise serializers.ValidationError('Estimated days cannot be negative.')
+        return value
+
+
+OpportunityModuleCreateSerializer = OpportunityModuleSerializer
+
+
+class OpportunityCreateSerializer(serializers.ModelSerializer):
+    company_name = serializers.CharField(write_only=True, required=False)
+    enquiry_for = serializers.CharField(write_only=True, required=False)
+    enquiry_date = serializers.DateField(
+        write_only=True,
+        required=False,
+        allow_null=True,
+        input_formats=["%m-%d-%Y", "%Y-%m-%d"],
+    )
+    modules = OpportunityModuleSerializer(
+        many=True,
+        required=False
+    )
+
+    class Meta:
+        model = Opportunity
+        fields = [
+            'id',
+            'lead',
+            'company',
+            'company_name',
+            'enquiry_for',
+            'enquiry_date',
+            'status',
+            'source',
+            'expected_close_date',
+            'estimated_value',
+            'probability',
+            'is_converted_from_lead',
+            'converted_at',
+            'followup_history',
+            'created_at',
+            'updated_at',
+            'is_active',
+            'modules',
+        ]
+        extra_kwargs = {
+            'id': {'read_only': True},
+            'lead': {
+                'required': False,
+                'allow_null': True
+            },
+            'is_converted_from_lead': {'read_only': True},
+            'converted_at': {'read_only': True},
+            'followup_history': {'read_only': True},
+            'created_at': {'read_only': True},
+            'updated_at': {'read_only': True},
+            'is_active': {'read_only': True},
+        }
+
+    def validate_lead(self, lead):
+        if lead and hasattr(lead, 'opportunity'):
+            raise serializers.ValidationError(
+                f'Lead #{lead.sr_no} already has an opportunity.'
+            )
+        return lead
+
+    def create(self, validated_data):
+        modules_data = validated_data.pop('modules', [])
+        company_name = validated_data.pop('company_name', '').strip()
+        enquiry_for = validated_data.pop('enquiry_for', None)
+        enquiry_date = validated_data.pop('enquiry_date', None)
+
+        lead = validated_data.get('lead')
+        company = validated_data.get('company') or (lead.company if lead else None)
+        if company is None and company_name:
+            company = Company.objects.filter(name__iexact=company_name).first()
+            if company is None:
+                company = Company.objects.create(name=company_name)
+        if company is not None:
+            validated_data['company'] = company
+            company_name = company.name
+        if lead is not None:
+            enquiry_for = enquiry_for or lead.enquiry_for
+            enquiry_date = enquiry_date or lead.enquiry_date
+        if enquiry_for:
+            validated_data['enquiry_for'] = enquiry_for
+        if enquiry_date:
+            validated_data['enquiry_date'] = enquiry_date
+        opportunity = Opportunity.objects.create(
+            **validated_data,
+            is_converted_from_lead=bool(lead)
+        )
+
+        for index, module_data in enumerate(modules_data, start=1):
+            module_data.setdefault('module_number', index)
+
+            OpportunityModule.objects.create(
+                opportunity=opportunity,
+                **module_data
+            )
+
+        return opportunity
+
+    def update(self, instance, validated_data):
+        modules_data = validated_data.pop('modules', None)
+        company_name = validated_data.pop('company_name', '').strip()
+        enquiry_for = validated_data.pop('enquiry_for', None)
+        enquiry_date = validated_data.pop('enquiry_date', None)
+        if enquiry_for:
+            validated_data['enquiry_for'] = enquiry_for
+        if enquiry_date:
+            validated_data['enquiry_date'] = enquiry_date
+        if company_name and 'company' not in validated_data:
+            company = Company.objects.filter(name__iexact=company_name).first()
+            if company is None:
+                company = Company.objects.create(name=company_name)
+            validated_data['company'] = company
+        opportunity = super().update(instance, validated_data)
+
+        if modules_data is not None:
+            opportunity.modules.all().delete()
+            for index, module_data in enumerate(modules_data, start=1):
+                module_data.setdefault('module_number', index)
+                OpportunityModule.objects.create(
+                    opportunity=opportunity,
+                    **module_data
+                )
+
+        return opportunity
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        lead = instance.lead
+        data.update({
+            'company_name': instance.company.name if instance.company else '',
+            'enquiry_for': instance.enquiry_for or (lead.enquiry_for if lead else ''),
+            'enquiry_date': instance.enquiry_date or (lead.enquiry_date if lead else None),
+        })
+        return data
+      
