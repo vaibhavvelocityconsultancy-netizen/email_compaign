@@ -13,6 +13,8 @@ from .models import (
     MessageTemplate,
     Opportunity,
     OpportunityModule,
+    Quotation,
+    QuotationItem,
     Sequence,
     SequenceStep,
     State,
@@ -630,6 +632,7 @@ OpportunityModuleCreateSerializer = OpportunityModuleSerializer
 
 class OpportunityCreateSerializer(serializers.ModelSerializer):
     company_name = serializers.CharField(write_only=True, required=False)
+    project_name = serializers.CharField(required=False, allow_blank=True)
     enquiry_for = serializers.CharField(write_only=True, required=False)
     enquiry_date = serializers.DateField(
         write_only=True,
@@ -649,6 +652,7 @@ class OpportunityCreateSerializer(serializers.ModelSerializer):
             'lead',
             'company',
             'company_name',
+            'project_name',
             'enquiry_for',
             'enquiry_date',
             'status',
@@ -688,6 +692,7 @@ class OpportunityCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         modules_data = validated_data.pop('modules', [])
         company_name = validated_data.pop('company_name', '').strip()
+        project_name = validated_data.pop('project_name', '').strip()
         enquiry_for = validated_data.pop('enquiry_for', None)
         enquiry_date = validated_data.pop('enquiry_date', None)
 
@@ -703,6 +708,8 @@ class OpportunityCreateSerializer(serializers.ModelSerializer):
         if lead is not None:
             enquiry_for = enquiry_for or lead.enquiry_for
             enquiry_date = enquiry_date or lead.enquiry_date
+        if project_name:
+            validated_data['project_name'] = project_name
         if enquiry_for:
             validated_data['enquiry_for'] = enquiry_for
         if enquiry_date:
@@ -725,8 +732,11 @@ class OpportunityCreateSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         modules_data = validated_data.pop('modules', None)
         company_name = validated_data.pop('company_name', '').strip()
+        project_name = validated_data.pop('project_name', None)
         enquiry_for = validated_data.pop('enquiry_for', None)
         enquiry_date = validated_data.pop('enquiry_date', None)
+        if project_name is not None:
+            validated_data['project_name'] = project_name.strip()
         if enquiry_for:
             validated_data['enquiry_for'] = enquiry_for
         if enquiry_date:
@@ -754,8 +764,166 @@ class OpportunityCreateSerializer(serializers.ModelSerializer):
         lead = instance.lead
         data.update({
             'company_name': instance.company.name if instance.company else '',
+            'project_name': instance.project_name,
             'enquiry_for': instance.enquiry_for or (lead.enquiry_for if lead else ''),
             'enquiry_date': instance.enquiry_date or (lead.enquiry_date if lead else None),
         })
         return data
+
+
+class QuotationItemSerializer(serializers.ModelSerializer):
+    module_name = serializers.CharField(source="module.module_name", read_only=True)
+
+    class Meta:
+        model = QuotationItem
+        fields = [
+            "id",
+            "quotation",
+            "module",
+            "module_name",
+            "description",
+            "requirements",
+            "estimated_cost",
+            "estimated_days",
+            "priority",
+            "remarks",
+            "amount",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "quotation", "created_at", "updated_at"]
+
+    def validate_module_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Module name cannot be empty.")
+        return value
+
+    def validate_amount(self, value):
+        if value < 0:
+            raise serializers.ValidationError("Amount cannot be negative.")
+        return value
+
+    def validate_estimated_cost(self, value):
+        if value is not None and value < 0:
+            raise serializers.ValidationError("Estimated cost cannot be negative.")
+        return value
+
+    def validate_estimated_days(self, value):
+        if value is not None and value < 0:
+            raise serializers.ValidationError("Estimated days cannot be negative.")
+        return value
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if not instance.module_name and instance.module:
+            data["module_name"] = instance.module.module_name
+        return data
+
+
+class QuotationSerializer(serializers.ModelSerializer):
+    items = QuotationItemSerializer(many=True, required=False)
+    company_name = serializers.SerializerMethodField()
+    project_name = serializers.CharField(required=False, allow_blank=True)
+    created_by = serializers.IntegerField(source="created_by_id", read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+    tax_type_display = serializers.CharField(source="get_tax_type_display", read_only=True)
+    quotation_date = serializers.DateField(
+        format="%m-%d-%Y",
+        input_formats=["%m-%d-%Y", "%Y-%m-%d"],
+    )
+
+    class Meta:
+        model = Quotation
+        fields = [
+            "id",
+            "quotation_number",
+            "quotation_date",
+            "opportunity",
+            "company_name",
+            "project_name",
+            "status",
+            "status_display",
+            "subtotal",
+            "discount",
+            "taxable_amount",
+            "tax_type",
+            "tax_type_display",
+            "tax_percentage",
+            "tax_amount",
+            "cgst_amount",
+            "sgst_amount",
+            "igst_amount",
+            "packing_charges",
+            "total_amount",
+            "terms_conditions",
+            "delivery_timeline",
+            "quotation_pdf",
+            "pdf_ref_number",
+            "final_offer_generated",
+            "final_offer_pdf",
+            "fo_as_ref",
+            "send_history",
+            "created_by",
+            "created_by_name",
+            "created_at",
+            "updated_at",
+            "items",
+        ]
+        read_only_fields = [
+            "id",
+            "status_display",
+            "tax_type_display",
+            "created_by",
+            "created_by_name",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_created_by_name(self, obj):
+        user = obj.created_by
+        return user.get_full_name() or user.get_username() if user else None
+
+    def get_company_name(self, obj):
+        opportunity = obj.opportunity
+        if opportunity is None:
+            return ""
+        company = opportunity.company
+        if company:
+            return company.name
+        try:
+            lead = opportunity.lead
+        except Lead.DoesNotExist:
+            lead = None
+        return lead.company.name if lead and lead.company else ""
+
+    def validate(self, attrs):
+        if attrs.get("discount", 0) < 0:
+            raise serializers.ValidationError({"discount": "Discount cannot be negative."})
+        if attrs.get("tax_percentage", 0) < 0:
+            raise serializers.ValidationError({"tax_percentage": "Tax percentage cannot be negative."})
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        items_data = validated_data.pop("items", [])
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if user is None or not user.is_authenticated:
+            raise serializers.ValidationError({"created_by": "An authenticated user is required."})
+        quotation = Quotation.objects.create(created_by=user, **validated_data)
+        for item_data in items_data:
+            QuotationItem.objects.create(quotation=quotation, **item_data)
+        return quotation
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        items_data = validated_data.pop("items", None)
+        quotation = super().update(instance, validated_data)
+        if items_data is not None:
+            quotation.items.all().delete()
+            for item_data in items_data:
+                QuotationItem.objects.create(quotation=quotation, **item_data)
+        return quotation
       

@@ -130,6 +130,12 @@ class Lead(models.Model):
         ("COLD", "Cold"),
     ]
 
+    # Compatibility fields used by older tests and simpler lead creation flows.
+    name = models.CharField(max_length=200, blank=True, default="")
+    email = models.EmailField(blank=True, null=True)
+    phone = models.CharField(max_length=20, blank=True, default="")
+    whatsapp_opt_in = models.BooleanField(default=False)
+
     # Basic info
     sr_no = models.AutoField(primary_key=True)
     company = models.ForeignKey(
@@ -142,13 +148,13 @@ class Lead(models.Model):
         null=True,
         blank=True,
     )
-    enquiry_for = models.CharField(max_length=20, choices=ENQUIRY_FOR_CHOICES)
+    enquiry_for = models.CharField(max_length=20, choices=ENQUIRY_FOR_CHOICES, blank=True, default="LEAD")
 
     # Enquirey details
-    enquiry_date = models.DateField()
+    enquiry_date = models.DateField(null=True, blank=True)
     # lead_received_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='received_enquiries')
     # lead_assign_to = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_leads')
-    source = models.CharField(max_length=20, choices=SOURCE_CHOICES)
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, blank=True, default="OTHER")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="NEW")
     followup_date = models.DateField(null=True, blank=True)
     followup_remarks = models.TextField(blank=True)
@@ -162,8 +168,36 @@ class Lead(models.Model):
     is_opportunity = models.BooleanField(default=False)
     followup_history = models.JSONField(default=list, blank=True)
 
+    def __init__(self, *args, **kwargs):
+        company_value = kwargs.get("company")
+        if isinstance(company_value, str):
+            kwargs["company"] = self._resolve_company_name(company_value)
+        super().__init__(*args, **kwargs)
+        if isinstance(self.company, str):
+            self.company = self._resolve_company_name(self.company)
+
+    @staticmethod
+    def _resolve_company_name(company_name):
+        if not company_name:
+            return None
+        company = Company.objects.filter(name__iexact=company_name).first()
+        if company is not None:
+            return company
+        return Company.objects.create(name=company_name)
+
+    def save(self, *args, **kwargs):
+        if isinstance(self.company, str):
+            self.company = self._resolve_company_name(self.company)
+        if not self.name and self.company and self.company.name:
+            self.name = self.company.name
+        if self.email in (None, ""):
+            self.email = None
+        if not self.phone and self.contact and self.contact.phone:
+            self.phone = self.contact.phone
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"Enquiry #{self.sr_no}"
+        return self.name or f"Enquiry #{self.sr_no}"
 
 
 class MessageTemplate(models.Model):
@@ -352,6 +386,8 @@ class Opportunity(models.Model):
 
     enquiry_for = models.CharField(max_length=20, blank=True)
 
+    project_name = models.CharField(max_length=255, blank=True, default="")
+
     enquiry_date = models.DateField(null=True, blank=True)
 
     status = models.CharField(
@@ -455,3 +491,280 @@ class OpportunityModule(models.Model):
 
     def __str__(self):
         return f"{self.module_number} - {self.module_name}" 
+      
+      
+
+
+# quotation
+from django.db import models
+
+
+class Quotation(models.Model):
+
+    STATUS_CHOICES = [
+        ("DRAFT", "Draft"),
+        ("SENT", "Sent"),
+        ("APPROVED", "Approved"),
+        ("REJECTED", "Rejected"),
+        ("REVISION", "Revision"),
+        ("CONVERTED", "Converted"),
+    ]
+
+    TAX_TYPE_CHOICES = [
+        ("INTRA_STATE", "Intra State - CGST + SGST"),
+        ("INTER_STATE", "Inter State - IGST"),
+        ("INTER_STATE_LUT", "Inter State - IGST 0.1% (LUT Form)"),
+        ("SEZ_LUT", "SEZ - 0% (LUT Form)"),
+        ("EXPORT", "Export - 0% (Shipping Bill / Air Way Bill)"),
+    ]
+
+    # --------------------------------------------------
+    # BASIC INFORMATION
+    # --------------------------------------------------
+
+    quotation_number = models.CharField(
+        max_length=50,
+        unique=True,
+        db_index=True
+    )
+
+    quotation_date = models.DateField()
+
+    project_name = models.CharField(max_length=255, blank=True, default="")
+
+    opportunity = models.ForeignKey(
+        "Opportunity",
+        on_delete=models.PROTECT,
+        related_name="quotations",
+        null=True,
+        blank=True,
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="DRAFT"
+    )
+
+    # --------------------------------------------------
+    # AMOUNTS
+    # --------------------------------------------------
+
+    subtotal = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0
+    )
+
+    discount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0
+    )
+
+    taxable_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0
+    )
+
+    # --------------------------------------------------
+    # TAX
+    # --------------------------------------------------
+
+    tax_type = models.CharField(
+        max_length=30,
+        choices=TAX_TYPE_CHOICES,
+        blank=True
+    )
+
+    tax_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0
+    )
+
+    tax_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0
+    )
+
+    cgst_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0
+    )
+
+    sgst_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0
+    )
+
+    igst_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0
+    )
+
+    packing_charges = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0
+    )
+
+    total_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0
+    )
+
+    # --------------------------------------------------
+    # TERMS / DELIVERY
+    # --------------------------------------------------
+
+    terms_conditions = models.TextField(
+        blank=True
+    )
+
+    delivery_timeline = models.CharField(
+        max_length=255,
+        blank=True
+    )
+
+    # --------------------------------------------------
+    # QUOTATION DOCUMENT
+    # --------------------------------------------------
+
+    quotation_pdf = models.FileField(
+        upload_to="quotations/pdfs/",
+        null=True,
+        blank=True
+    )
+
+    pdf_ref_number = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True
+    )
+
+    # --------------------------------------------------
+    # FINAL OFFER
+    # --------------------------------------------------
+
+    final_offer_generated = models.BooleanField(
+        default=False
+    )
+
+    final_offer_pdf = models.FileField(
+        upload_to="quotations/final_offers/",
+        null=True,
+        blank=True
+    )
+
+    fo_as_ref = models.BooleanField(
+        default=False
+    )
+
+    # --------------------------------------------------
+    # SEND HISTORY
+    # --------------------------------------------------
+
+    send_history = models.JSONField(
+        default=list,
+        blank=True
+    )
+
+    # --------------------------------------------------
+    # AUDIT
+    # --------------------------------------------------
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="created_quotations"
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.quotation_number
+
+
+class QuotationItem(models.Model):
+
+    quotation = models.ForeignKey(
+        Quotation,
+        on_delete=models.CASCADE,
+        related_name="items"
+    )
+
+    module = models.ForeignKey(
+        "OpportunityModule",
+        on_delete=models.PROTECT,
+        related_name="quotation_items"
+        , null=True,
+        blank=True
+    )
+
+    module_name = models.CharField(max_length=255, blank=True)
+
+    requirements = models.TextField(blank=True)
+
+    estimated_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True
+    )
+
+    estimated_days = models.PositiveIntegerField(null=True, blank=True)
+
+    priority = models.CharField(
+        max_length=20,
+        choices=[
+            ("LOW", "Low"),
+            ("MEDIUM", "Medium"),
+            ("HIGH", "High"),
+        ],
+        default="MEDIUM"
+    )
+
+    remarks = models.TextField(blank=True)
+
+    description = models.TextField(
+        blank=True
+    )
+
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True
+    )
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        return (
+            f"{self.quotation.quotation_number} - "
+            f"{self.module.module_name}"
+        )

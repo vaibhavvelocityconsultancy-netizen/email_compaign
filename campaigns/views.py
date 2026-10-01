@@ -1,3 +1,5 @@
+from decimal import Decimal, InvalidOperation
+
 from django.forms import models
 from django.shortcuts import get_object_or_404, render
 from django.db.models import Count, Q
@@ -6,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework import generics, viewsets, status
 
 from rest_framework.decorators import action, api_view
+from rest_framework.permissions import IsAuthenticated
 
 # Create your views here.
 
@@ -21,6 +24,7 @@ from rest_framework import status
 import json
 
 from django.conf import settings
+from django.db import transaction
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -42,9 +46,10 @@ from campaigns.serializers import (
     LeadSerializer,
     OpportunityCreateSerializer,
     OpportunityModuleSerializer,
+    QuotationSerializer,
 )
 
-from .models import Batch, BatchLead, Channel, City, Company, CompanyContact, Country, MessageLog, Opportunity, OpportunityModule, Sequence, SequenceStep, State, MessageTemplate, Lead
+from .models import Batch, BatchLead, Channel, City, Company, CompanyContact, Country, MessageLog, Opportunity, OpportunityModule, Quotation, QuotationItem, Sequence, SequenceStep, State, MessageTemplate, Lead
 
 # ------------------------------------- masters ----------------------
 
@@ -282,6 +287,7 @@ class OpportunityModuleListCreateView(generics.ListCreateAPIView):
             opportunity_id=self.kwargs["opportunity_id"],
             opportunity__is_active=True,
         ).order_by("module_number")
+        
 
     def perform_create(self, serializer):
         opportunity = self.get_opportunity()
@@ -302,6 +308,60 @@ class OpportunityModuleDetailView(generics.RetrieveUpdateDestroyAPIView):
             opportunity_id=self.kwargs["opportunity_id"],
             opportunity__is_active=True,
         )
+
+
+class QuotationListCreateView(generics.ListCreateAPIView):
+    queryset = (
+        Quotation.objects
+        .select_related("opportunity", "created_by")
+        .prefetch_related("items__module")
+        .all()
+    )
+    serializer_class = QuotationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        status_filter = self.request.query_params.get("status")
+        opportunity_id = self.request.query_params.get("opportunity")
+        search = self.request.query_params.get("search")
+
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        if opportunity_id:
+            queryset = queryset.filter(opportunity_id=opportunity_id)
+        if search:
+            queryset = queryset.filter(
+                Q(quotation_number__icontains=search)
+                | Q(opportunity__enquiry_for__icontains=search)
+            )
+        return queryset.order_by("-created_at")
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+
+class QuotationDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = (
+        Quotation.objects
+        .select_related("opportunity", "created_by")
+        .prefetch_related("items__module")
+        .all()
+    )
+    serializer_class = QuotationSerializer
+    permission_classes = [IsAuthenticated]
+
+
+class GenerateFinalOfferView(generics.GenericAPIView):
+    queryset = Quotation.objects.all()
+    serializer_class = QuotationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        quotation = self.get_object()
+        quotation.final_offer_generated = True
+        quotation.save(update_fields=["final_offer_generated", "updated_at"])
+        return Response(self.get_serializer(quotation).data, status=status.HTTP_200_OK)
 
 
 class EmailLogListView(APIView):
@@ -716,3 +776,135 @@ def lead_convert_to_opportunity(request, lead_id):
         },
         status=status.HTTP_201_CREATED
     )
+    
+    
+    # convert to quotaitn
+def generate_quotation_number():
+    year = timezone.now().year
+
+    prefix = f"QT-{year}-"
+
+    last_quotation = (
+        Quotation.objects
+        .filter(quotation_number__startswith=prefix)
+        .order_by("-id")
+        .first()
+    )
+
+    if last_quotation:
+        try:
+            last_number = int(
+                last_quotation.quotation_number.replace(prefix, "")
+            )
+        except ValueError:
+            last_number = 0
+    else:
+        last_number = 0
+
+    return f"{prefix}{last_number + 1:04d}"
+
+class ConvertOpportunityToQuotationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, pk):
+        opportunity = (
+            Opportunity.objects
+            .prefetch_related("modules")
+            .select_related("company", "lead")
+            .filter(id=pk, is_active=True)
+            .first()
+        )
+
+        if opportunity is None:
+            return Response({"detail": "Opportunity not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        modules = list(opportunity.modules.all().order_by("module_number"))
+        if not modules:
+            return Response({"detail": "Cannot convert opportunity without modules."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if opportunity.quotations.filter(status__in=["DRAFT", "SENT", "APPROVED", "REVISION"]).exists():
+            return Response({"detail": "An active quotation already exists for this opportunity."}, status=status.HTTP_400_BAD_REQUEST)
+
+        raw_items = request.data.get("items")
+        if not isinstance(raw_items, list) or not raw_items:
+            return Response({"detail": "At least one module item is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        module_map = {module.id: module for module in modules}
+        submitted_by_module = {}
+
+        for index, raw_item in enumerate(raw_items, start=1):
+            if not isinstance(raw_item, dict):
+                return Response({"detail": f"Item {index} is invalid."}, status=status.HTTP_400_BAD_REQUEST)
+
+            module_id = raw_item.get("module")
+            amount_value = raw_item.get("amount")
+
+            if module_id in (None, ""):
+                return Response({"detail": f"Item {index} is missing a module reference."}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                module_id = int(module_id)
+            except (TypeError, ValueError):
+                return Response({"detail": f"Item {index} has an invalid module id."}, status=status.HTTP_400_BAD_REQUEST)
+
+            if module_id not in module_map:
+                return Response({"detail": f"Module {module_id} does not belong to this opportunity."}, status=status.HTTP_400_BAD_REQUEST)
+
+            if module_id in submitted_by_module:
+                return Response({"detail": f"Module {module_id} was submitted more than once."}, status=status.HTTP_400_BAD_REQUEST)
+
+            if amount_value in (None, ""):
+                return Response({"detail": f"Amount is required for module {module_id}."}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                amount = Decimal(str(amount_value))
+            except InvalidOperation:
+                return Response({"detail": f"Amount for module {module_id} must be numeric."}, status=status.HTTP_400_BAD_REQUEST)
+
+            if amount < 0:
+                return Response({"detail": f"Amount for module {module_id} cannot be negative."}, status=status.HTTP_400_BAD_REQUEST)
+
+            submitted_by_module[module_id] = amount
+
+        missing_modules = [module.id for module in modules if module.id not in submitted_by_module]
+        if missing_modules:
+            return Response({"detail": "All opportunity modules must be included in the request."}, status=status.HTTP_400_BAD_REQUEST)
+
+        quotation = Quotation.objects.create(
+            quotation_number=generate_quotation_number(),
+            quotation_date=timezone.now().date(),
+            opportunity=opportunity,
+            project_name=(opportunity.project_name or "").strip(),
+            status="DRAFT",
+            discount=Decimal("0.00"),
+            tax_type="",
+            tax_percentage=Decimal("0.00"),
+            packing_charges=Decimal("0.00"),
+            terms_conditions="",
+            delivery_timeline="",
+            created_by=request.user,
+        )
+
+        subtotal = Decimal("0.00")
+        for module in modules:
+            amount = submitted_by_module[module.id]
+            QuotationItem.objects.create(
+                quotation=quotation,
+                module=module,
+                description=module.description or module.module_name,
+                amount=amount,
+            )
+            subtotal += amount
+
+        quotation.subtotal = subtotal
+        quotation.taxable_amount = subtotal
+        quotation.tax_amount = Decimal("0.00")
+        quotation.cgst_amount = Decimal("0.00")
+        quotation.sgst_amount = Decimal("0.00")
+        quotation.igst_amount = Decimal("0.00")
+        quotation.total_amount = subtotal
+        quotation.save()
+
+        serializer = QuotationSerializer(quotation)
+        return Response({"message": "Opportunity converted to quotation successfully.", "quotation": serializer.data}, status=status.HTTP_201_CREATED)

@@ -1,7 +1,26 @@
+from decimal import Decimal
+
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from .models import Batch, BatchLead, Channel, City, Company, CompanyContact, Country, Lead, MessageTemplate, Sequence, State
+from .models import (
+    Batch,
+    BatchLead,
+    Channel,
+    City,
+    Company,
+    CompanyContact,
+    Country,
+    Lead,
+    MessageTemplate,
+    Opportunity,
+    OpportunityModule,
+    Quotation,
+    QuotationItem,
+    Sequence,
+    State,
+)
 from .serializers import LeadSerializer
 
 
@@ -74,6 +93,65 @@ class LeadSerializerTests(TestCase):
         self.assertEqual(lead.company.state, state)
         self.assertEqual(lead.company.country, country)
         self.assertTrue(CompanyContact.objects.filter(company=lead.company, name="Nitin Shah").exists())
+
+
+class OpportunityConversionTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = get_user_model().objects.create_user(
+            username="salesrep",
+            email="sales@example.com",
+            password="strong-pass-123",
+        )
+        self.client.force_authenticate(user=self.user)
+
+        self.company = Company.objects.create(name="ABC Technologies")
+        self.opportunity = Opportunity.objects.create(
+            company=self.company,
+            project_name="Inventory Management System",
+            enquiry_for="CLIENT",
+            status="PROSPECTING",
+            is_active=True,
+        )
+        self.module_1 = OpportunityModule.objects.create(
+            opportunity=self.opportunity,
+            module_number=1,
+            module_name="Product Management",
+            description="Product & category management",
+            estimated_cost=Decimal("40000"),
+        )
+        self.module_2 = OpportunityModule.objects.create(
+            opportunity=self.opportunity,
+            module_number=2,
+            module_name="Inventory Management",
+            description="Stock management",
+            estimated_cost=Decimal("35000"),
+        )
+
+    def test_converts_opportunity_with_user_submitted_module_amounts(self):
+        payload = {
+            "items": [
+                {"module": self.module_1.id, "amount": "40000"},
+                {"module": self.module_2.id, "amount": "45000"},
+            ]
+        }
+
+        response = self.client.post(
+            f"/api/opportunities/{self.opportunity.id}/convert-to-quotation/",
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(Quotation.objects.count(), 1)
+        quotation = Quotation.objects.get()
+        self.assertEqual(quotation.project_name, "Inventory Management System")
+        self.assertEqual(quotation.subtotal, Decimal("85000.00"))
+        self.assertEqual(quotation.total_amount, Decimal("85000.00"))
+        self.assertEqual(quotation.items.count(), 2)
+        self.assertEqual(quotation.items.get(module=self.module_1).amount, Decimal("40000.00"))
+        self.assertEqual(quotation.items.get(module=self.module_2).amount, Decimal("45000.00"))
+        self.assertEqual(response.data["quotation"]["project_name"], "Inventory Management System")
 
 
 class CampaignSequenceAPITests(TestCase):
