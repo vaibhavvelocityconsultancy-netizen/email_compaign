@@ -17,6 +17,11 @@ from .views import (
     LeadDetailView,
     LeadListView,
     LeadOptionsView,
+    lead_convert_to_opportunity,
+    OpportunityDetailView,
+    OpportunityListCreateView,
+    OpportunityModuleDetailView,
+    OpportunityModuleListCreateView,
     StateViewSet,
     mailgun_inbound_webhook,
     mailgun_webhook,
@@ -64,6 +69,31 @@ urlpatterns = [
         "leads/<int:pk>/",
         LeadDetailView.as_view(),
         name="lead-detail",
+    ),
+    path(
+        "leads/<int:lead_id>/convert-to-opportunity/",
+        lead_convert_to_opportunity,
+        name="lead-convert-to-opportunity",
+    ),
+    path(
+        "opportunities/",
+        OpportunityListCreateView.as_view(),
+        name="opportunity-list",
+    ),
+    path(
+        "opportunities/<int:pk>/",
+        OpportunityDetailView.as_view(),
+        name="opportunity-detail",
+    ),
+    path(
+        "opportunities/<int:opportunity_id>/modules/",
+        OpportunityModuleListCreateView.as_view(),
+        name="opportunity-module-list",
+    ),
+    path(
+        "opportunities/<int:opportunity_id>/modules/<int:pk>/",
+        OpportunityModuleDetailView.as_view(),
+        name="opportunity-module-detail",
     ),
     path(
         "email-logs/",

@@ -1,4 +1,5 @@
 from django.core.exceptions import ValidationError
+from django.conf import settings
 from django.db import models
 
 
@@ -317,8 +318,7 @@ EmailLog = MessageLog
 
 
 class Opportunity(models.Model):
-    """Opportunity created from Lead - this is where items are added"""
-    
+
     STATUS_CHOICES = [
         ('PROSPECTING', 'Prospecting'),
         ('QUALIFICATION', 'Qualification'),
@@ -331,38 +331,127 @@ class Opportunity(models.Model):
         ('CLOSED_WON', 'Closed Won'),
         ('CLOSED_LOST', 'Closed Lost'),
     ]
-    enquiry_for = models.CharField(max_length=20, choices=Lead.ENQUIRY_FOR_CHOICES, blank=True)
-    company = models.ForeignKey(Company, on_delete=models.PROTECT, related_name='opportunities', null=True, blank=True)
-    enquiry_date = models.DateField(null=True, blank=True) 
-    # Link to original lead
-    lead = models.OneToOneField(Lead, on_delete=models.CASCADE, related_name='opportunity', null=True, blank=True)
-    
-    # Opportunity specific fields
-    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='PROSPECTING')
-    source = models.CharField(max_length=20, blank=True)
-    assign_to = models.ForeignKey('accounts.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_opportunities')
+
+    lead = models.OneToOneField(
+        Lead,
+        on_delete=models.CASCADE,
+        related_name='opportunity',
+        null=True,
+        blank=True
+    )
+
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.PROTECT,
+        related_name='opportunities',
+        null=True,
+        blank=True
+    )
+
+  
+
+    enquiry_for = models.CharField(max_length=20, blank=True)
+
+    enquiry_date = models.DateField(null=True, blank=True)
+
+    status = models.CharField(
+        max_length=30,
+        choices=STATUS_CHOICES,
+        default='PROSPECTING'
+    )
+
+    source = models.CharField(max_length=30, blank=True)
+
+    assign_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_opportunities'
+    )
+
     expected_close_date = models.DateField(null=True, blank=True)
-    
-    # Conversion info
+
+    estimated_value = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True
+    )
+
+    probability = models.PositiveIntegerField(
+        null=True,
+        blank=True
+    )
+
     is_converted_from_lead = models.BooleanField(default=False)
-    converted_at = models.DateTimeField(auto_now_add=True)
-    converted_by = models.ForeignKey('accounts.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='converted_opportunities')
-    
-    # Follow-up tracking
+
+    converted_at = models.DateTimeField(null=True, blank=True)
+
+    converted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='converted_opportunities'
+    )
+
     followup_history = models.JSONField(default=list, blank=True)
-    
-    # Audit
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
-    
+
     class Meta:
         ordering = ['-created_at']
         verbose_name_plural = "Opportunities"
-        
-    def save(self, *args, **kwargs):
-        is_new = self.pk is None
-        super().save(*args, **kwargs)
-        if is_new and self.lead:
-            self.lead.company.is_contact = False
-            self.lead.company.save(update_fields=['is_contact'])
+
+
+
+class OpportunityModule(models.Model):
+    opportunity = models.ForeignKey(
+        Opportunity,
+        on_delete=models.CASCADE,
+        related_name="modules"
+    )
+
+    module_number = models.PositiveIntegerField()
+
+    module_name = models.CharField(max_length=255)
+
+    description = models.TextField(blank=True)
+
+    requirements = models.TextField(blank=True)
+
+    estimated_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True
+    )
+
+    estimated_days = models.PositiveIntegerField(
+        null=True,
+        blank=True
+    )
+
+    priority = models.CharField(
+        max_length=20,
+        choices=[
+            ("LOW", "Low"),
+            ("MEDIUM", "Medium"),
+            ("HIGH", "High"),
+        ],
+        default="MEDIUM"
+    )
+
+    remarks = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["module_number"]
+
+    def __str__(self):
+        return f"{self.module_number} - {self.module_name}" 
