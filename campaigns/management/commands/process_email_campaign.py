@@ -185,8 +185,8 @@ class Command(BaseCommand):
 
                     lead = batch_lead.lead
 
-                    company_name = ""
-                    contact_name = lead.lead_assign_to.get_full_name() if lead.lead_assign_to else ""
+                    company_name = lead.company.name if lead.company else ""
+                    contact_name = lead.contact.name if lead.contact else ""
                     enquiry_for = lead.get_enquiry_for_display()
 
                     # --------------------------------

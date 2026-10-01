@@ -208,15 +208,17 @@ class Command(BaseCommand):
 	@staticmethod
 	def _template_components(template: MessageTemplate, batch_lead, media_header=None):
 		lead = batch_lead.lead
+		contact = lead.contact
+		company = lead.company
 		values = {
-			"name": lead.lead_assign_to.get_full_name() if lead.lead_assign_to else "",
-			"first name": lead.lead_assign_to.first_name if lead.lead_assign_to else "",
-			"company_name": "",
+			"name": contact.name if contact else "",
+			"first name": contact.name.split()[0] if contact and contact.name else "",
+			"company_name": company.name if company else "",
 			"enquiry_for": lead.get_enquiry_for_display(),
 			"product_name": "Product",
 			"your_name": "sales team",
 		}
-		position_values = [lead.get_enquiry_for_display(), lead.enquiry_date.isoformat(), batch_lead.phone, batch_lead.batch.name]
+		position_values = [contact.name if contact else "", company.name if company else "", batch_lead.phone, batch_lead.batch.name]
 		body_parameters = []
 		for variable in re.findall(r"\{\{\s*([^{}]+?)\s*\}\}", template.body):
 			if variable.isdigit():

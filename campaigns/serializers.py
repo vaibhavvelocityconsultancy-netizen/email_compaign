@@ -1,23 +1,40 @@
 from django.db import transaction
-from django.contrib.auth import get_user_model
 from rest_framework import serializers
-from .models import Batch, BatchLead, Channel, MessageLog, MessageTemplate, Sequence, SequenceStep, Lead
+from .models import Batch, BatchLead, Channel, Company, CompanyContact, MessageLog, MessageTemplate, Sequence, SequenceStep, Lead
 
 
 class LeadSerializer(serializers.ModelSerializer):
-    lead_received_by_name = serializers.SerializerMethodField()
-    lead_assign_to_name = serializers.SerializerMethodField()
+    company_name = serializers.CharField(write_only=True, max_length=200)
+    company_address = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    company_city = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=100)
+    company_state = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=100)
+    company_pincode = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=10)
+    company_country = serializers.CharField(write_only=True, required=False, max_length=100)
+    company_gst_number = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=50)
+    contact_name = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=100)
+    contact_designation = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=100)
+    contact_mobile = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=20)
+    contact_email = serializers.EmailField(write_only=True, required=False, allow_blank=True)
 
     class Meta:
         model = Lead
         fields = [
             'sr_no',
+            'company',
+            'contact',
+            'company_name',
+            'company_address',
+            'company_city',
+            'company_state',
+            'company_pincode',
+            'company_country',
+            'company_gst_number',
+            'contact_name',
+            'contact_designation',
+            'contact_mobile',
+            'contact_email',
             'enquiry_for',
             'enquiry_date',
-            'lead_received_by',
-            'lead_received_by_name',
-            'lead_assign_to',
-            'lead_assign_to_name',
             'source',
             'status',
             'followup_date',
@@ -29,22 +46,83 @@ class LeadSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['sr_no', 'lead_received_by_name', 'lead_assign_to_name', 'tracker', 'followup_history', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['sr_no', 'company', 'contact', 'tracker', 'followup_history', 'is_active', 'created_at', 'updated_at']
 
-    lead_received_by = serializers.PrimaryKeyRelatedField(queryset=get_user_model().objects.filter(is_active=True))
-    lead_assign_to = serializers.PrimaryKeyRelatedField(
-        queryset=get_user_model().objects.filter(is_active=True),
-        required=False,
-        allow_null=True,
-    )
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        company = instance.company
+        contact = instance.contact
+        data.update({
+            'company_name': company.name if company else '',
+            'company_address': company.address if company else '',
+            'company_city': company.city if company else '',
+            'company_state': company.state if company else '',
+            'company_pincode': company.pincode if company else '',
+            'company_country': company.country if company else 'India',
+            'company_gst_number': company.gst_number if company else '',
+            'contact_name': contact.name if contact else '',
+            'contact_designation': contact.designation if contact else '',
+            'contact_mobile': contact.phone if contact else '',
+            'contact_email': contact.email if contact else '',
+        })
+        return data
 
-    def get_lead_received_by_name(self, lead):
-        return lead.lead_received_by.get_full_name() or lead.lead_received_by.get_username()
+    @staticmethod
+    def _save_company(validated_data, instance=None):
+        company_data = {
+            'name': validated_data.pop('company_name'),
+            'address': validated_data.pop('company_address', ''),
+            'city': validated_data.pop('company_city', ''),
+            'state': validated_data.pop('company_state', ''),
+            'pincode': validated_data.pop('company_pincode', ''),
+            'country': validated_data.pop('company_country', 'India'),
+            'gst_number': validated_data.pop('company_gst_number', ''),
+        }
+        company = instance.company if instance and instance.company and instance.company.name.casefold() == company_data['name'].casefold() else None
+        if company is None:
+            company = Company.objects.filter(name__iexact=company_data['name']).first()
+        if company is None:
+            return Company.objects.create(**company_data)
+        for field, value in company_data.items():
+            setattr(company, field, value)
+        company.save()
+        return company
 
-    def get_lead_assign_to_name(self, lead):
-        if not lead.lead_assign_to:
+    @staticmethod
+    def _save_contact(validated_data, company, instance=None):
+        contact_name = validated_data.pop('contact_name', '').strip()
+        designation = validated_data.pop('contact_designation', '')
+        phone = validated_data.pop('contact_mobile', '')
+        email = validated_data.pop('contact_email', '')
+        if not contact_name:
             return None
-        return lead.lead_assign_to.get_full_name() or lead.lead_assign_to.get_username()
+
+        contact = instance.contact if instance and instance.contact and instance.contact.company_id == company.pk and instance.contact.name.casefold() == contact_name.casefold() else None
+        if contact is None:
+            contact = company.contacts.filter(name__iexact=contact_name).first()
+        if contact is None:
+            contact = CompanyContact(company=company, name=contact_name)
+        contact.designation = designation
+        contact.phone = phone
+        contact.email = email
+        if not contact.pk and not company.contacts.filter(is_primary=True, is_active=True).exists():
+            contact.is_primary = True
+        contact.save()
+        return contact
+
+    @transaction.atomic
+    def create(self, validated_data):
+        company = self._save_company(validated_data)
+        contact = self._save_contact(validated_data, company)
+        return Lead.objects.create(company=company, contact=contact, **validated_data)
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        company = self._save_company(validated_data, instance)
+        contact = self._save_contact(validated_data, company, instance)
+        instance.company = company
+        instance.contact = contact
+        return super().update(instance, validated_data)
         
         
 class MessageTemplateSerializer(serializers.ModelSerializer):
@@ -183,7 +261,12 @@ class BatchSerializer(serializers.ModelSerializer):
         leads = validated_data.pop('lead_ids', [])
         batch = super().create(validated_data)
         BatchLead.objects.bulk_create([
-            BatchLead(batch=batch, lead=lead)
+            BatchLead(
+                batch=batch,
+                lead=lead,
+                email=lead.contact.email if lead.contact else '',
+                phone=lead.contact.phone if lead.contact else '',
+            )
             for lead in leads
         ])
         return batch
@@ -195,7 +278,12 @@ class BatchSerializer(serializers.ModelSerializer):
         if leads is not None:
             existing_ids = set(batch.batch_leads.values_list('lead_id', flat=True))
             BatchLead.objects.bulk_create([
-                BatchLead(batch=batch, lead=lead)
+                BatchLead(
+                    batch=batch,
+                    lead=lead,
+                    email=lead.contact.email if lead.contact else '',
+                    phone=lead.contact.phone if lead.contact else '',
+                )
                 for lead in leads
                 if lead.pk not in existing_ids
             ])
