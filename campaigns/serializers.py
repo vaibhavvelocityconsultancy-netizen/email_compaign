@@ -824,6 +824,7 @@ class QuotationItemSerializer(serializers.ModelSerializer):
 class QuotationSerializer(serializers.ModelSerializer):
     items = QuotationItemSerializer(many=True, required=False)
     company_name = serializers.SerializerMethodField()
+    company_city = serializers.SerializerMethodField()
     project_name = serializers.CharField(required=False, allow_blank=True)
     created_by = serializers.IntegerField(source="created_by_id", read_only=True)
     created_by_name = serializers.SerializerMethodField()
@@ -833,6 +834,7 @@ class QuotationSerializer(serializers.ModelSerializer):
         format="%m-%d-%Y",
         input_formats=["%m-%d-%Y", "%Y-%m-%d"],
     )
+    fo_date = serializers.DateField(format="%Y-%m-%d", required=False, allow_null=True, read_only=True)
 
     class Meta:
         model = Quotation
@@ -842,6 +844,7 @@ class QuotationSerializer(serializers.ModelSerializer):
             "quotation_date",
             "opportunity",
             "company_name",
+            "company_city",
             "project_name",
             "status",
             "status_display",
@@ -862,6 +865,7 @@ class QuotationSerializer(serializers.ModelSerializer):
             "quotation_pdf",
             "pdf_ref_number",
             "final_offer_generated",
+            "fo_date",
             "final_offer_pdf",
             "fo_as_ref",
             "send_history",
@@ -897,6 +901,15 @@ class QuotationSerializer(serializers.ModelSerializer):
         except Lead.DoesNotExist:
             lead = None
         return lead.company.name if lead and lead.company else ""
+
+    def get_company_city(self, obj):
+        opportunity = obj.opportunity
+        company = opportunity.company if opportunity else None
+        if company and company.city:
+            return company.city.name
+        if opportunity and opportunity.lead and opportunity.lead.company and opportunity.lead.company.city:
+            return opportunity.lead.company.city.name
+        return ""
 
     def validate(self, attrs):
         if attrs.get("discount", 0) < 0:
