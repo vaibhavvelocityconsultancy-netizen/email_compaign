@@ -1,5 +1,8 @@
 from decimal import Decimal, InvalidOperation
+from io import BytesIO
+from textwrap import wrap
 
+from django.core.files.base import ContentFile
 from django.forms import models
 from django.shortcuts import get_object_or_404, render
 from django.db.models import Count, Q
@@ -28,6 +31,8 @@ from django.db import transaction
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
 
 
 
@@ -352,6 +357,80 @@ class QuotationDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated]
 
 
+def _generate_final_offer_pdf_bytes(quotation):
+    company = quotation.opportunity.company if quotation.opportunity else None
+    company_name = company.name if company else "N/A"
+    city_name = company.city.name if company and company.city else "N/A"
+    file_name = f"FINAL-OFFER-{quotation.quotation_number}.pdf"
+
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+
+    pdf.setTitle(file_name)
+    pdf.setFont("Helvetica-Bold", 18)
+    pdf.drawString(72, height - 48, "FINAL OFFER")
+
+    pdf.setFont("Helvetica-Bold", 11)
+    pdf.drawString(72, height - 78, "Company:")
+    pdf.setFont("Helvetica", 11)
+    pdf.drawString(160, height - 78, company_name)
+
+    pdf.setFont("Helvetica-Bold", 11)
+    pdf.drawString(72, height - 98, "Quotation No.:")
+    pdf.setFont("Helvetica", 11)
+    pdf.drawString(160, height - 98, quotation.quotation_number)
+
+    pdf.setFont("Helvetica-Bold", 11)
+    pdf.drawString(72, height - 118, "FO Date:")
+    pdf.setFont("Helvetica", 11)
+    pdf.drawString(160, height - 118, (quotation.fo_date or timezone.now().date()).strftime("%d-%m-%Y"))
+
+    pdf.setFont("Helvetica-Bold", 11)
+    pdf.drawString(72, height - 138, "City:")
+    pdf.setFont("Helvetica", 11)
+    pdf.drawString(160, height - 138, city_name)
+
+    pdf.setFont("Helvetica-Bold", 11)
+    pdf.drawString(72, height - 158, "Total:")
+    pdf.setFont("Helvetica", 11)
+    pdf.drawString(160, height - 158, f"₹ {Decimal(quotation.total_amount or 0):,.2f}")
+
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(72, height - 205, "Item")
+    pdf.drawString(220, height - 205, "Description")
+    pdf.drawString(470, height - 205, "Amount")
+    pdf.line(72, height - 212, 540, height - 212)
+
+    y = height - 235
+    for index, item in enumerate(quotation.items.all(), start=1):
+        label = item.module_name or f"Item {index}"
+        description = item.description or "—"
+        wrapped = wrap(description, width=42)
+        pdf.setFont("Helvetica-Bold", 9)
+        pdf.drawString(72, y, label[:30])
+        pdf.setFont("Helvetica", 9)
+        for offset, line in enumerate(wrapped[:3]):
+            pdf.drawString(220, y - offset * 12, line[:80])
+        pdf.drawRightString(540, y, f"₹ {Decimal(item.amount or 0):,.2f}")
+        y -= 38
+        if y < 90:
+            pdf.showPage()
+            y = height - 60
+
+    pdf.setFont("Helvetica-Bold", 11)
+    pdf.drawString(72, 90, "Terms & Conditions:")
+    pdf.setFont("Helvetica", 9)
+    terms = (quotation.terms_conditions or "Standard quotation terms apply.")
+    for offset, line in enumerate(wrap(terms, width=110)[:6]):
+        pdf.drawString(72, 72 + (offset * -12), line)
+
+    pdf.setFont("Helvetica-Bold", 11)
+    pdf.drawString(72, 30, "Thank you")
+    pdf.save()
+    return buffer.getvalue(), file_name
+
+
 class GenerateFinalOfferView(generics.GenericAPIView):
     queryset = Quotation.objects.all()
     serializer_class = QuotationSerializer
@@ -359,9 +438,22 @@ class GenerateFinalOfferView(generics.GenericAPIView):
 
     def post(self, request, pk):
         quotation = self.get_object()
+        pdf_bytes, file_name = _generate_final_offer_pdf_bytes(quotation)
         quotation.final_offer_generated = True
-        quotation.save(update_fields=["final_offer_generated", "updated_at"])
-        return Response(self.get_serializer(quotation).data, status=status.HTTP_200_OK)
+        quotation.fo_date = quotation.fo_date or timezone.now().date()
+        quotation.final_offer_pdf.save(file_name, ContentFile(pdf_bytes), save=False)
+        quotation.save(update_fields=["final_offer_generated", "fo_date", "final_offer_pdf", "updated_at"])
+
+        if (
+            request.headers.get("Accept", "").lower().find("application/pdf") >= 0
+            or request.GET.get("download") == "1"
+        ):
+            response = HttpResponse(pdf_bytes, content_type="application/pdf")
+            response["Content-Disposition"] = f'inline; filename="{file_name}"'
+            return response
+
+        serializer = self.get_serializer(quotation)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class EmailLogListView(APIView):

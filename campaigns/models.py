@@ -109,6 +109,12 @@ class Lead(models.Model):
     ENQUIRY_FOR_CHOICES = [
         ("LEAD", "Lead"),
         ("CLIENT", "Client"),
+        ("CRM", "CRM Software"),
+        ("EMAIL", "Email Campaign"),
+        ("WHATSAPP", "WhatsApp Campaign"),
+        ("SALES", "Sales Automation"),
+        ("MARKETING", "Marketing Solution"),
+        ("CUSTOM", "Custom Project"),
     ]
     SOURCE_CHOICES = [
         ("WEBSITE", "Website"),
@@ -655,6 +661,11 @@ class Quotation(models.Model):
 
     final_offer_generated = models.BooleanField(
         default=False
+    )
+
+    fo_date = models.DateField(
+        null=True,
+        blank=True
     )
 
     final_offer_pdf = models.FileField(
