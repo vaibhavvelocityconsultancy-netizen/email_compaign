@@ -577,7 +577,6 @@ class Quotation(models.Model):
     # --------------------------------------------------
     # TAX
     # --------------------------------------------------
-
     tax_type = models.CharField(
         max_length=30,
         choices=TAX_TYPE_CHOICES,
@@ -779,3 +778,125 @@ class QuotationItem(models.Model):
             f"{self.quotation.quotation_number} - "
             f"{self.module.module_name}"
         )
+
+
+
+# Task
+
+class Task(models.Model):
+    MODULE_CHOICES = [
+        ('LEAD', 'Lead'),
+        ('OPPORTUNITY', 'Opportunity'),
+        ('QUOTATION', 'Quotation'),
+    ]
+
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('IN_PROGRESS', 'In Progress'),
+        ('COMPLETED', 'Completed'),
+        ('CANCELLED', 'Cancelled'),
+    ]
+
+
+    PRIORITY_CHOICES = [
+        ('LOW', 'Low'),
+        ('MEDIUM', 'Medium'),
+        ('HIGH', 'High'),
+        ('URGENT', 'Urgent'),
+    ]
+
+    REPEAT_FREQUENCY_CHOICES = [
+        ('DAILY', 'Daily'),
+        ('WEEKLY', 'Weekly'),
+        ('MONTHLY', 'Monthly'),
+        ('YEARLY', 'Yearly'),
+    ]
+
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+
+    # Which module this task belongs to
+    module = models.CharField(max_length=20, choices=MODULE_CHOICES)
+
+    # ✅ Simple CharField - no hardcoded choices, controlled by API
+    task_regarding = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="What is this task about? (e.g., Follow Up, Payment, Miscellaneous)"
+    )
+
+    # Reference to the specific record in that module
+    reference_id = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="e.g. lead sr_no, PO number, order number (optional for miscellaneous)"
+    )
+
+    # Optional company for miscellaneous tasks
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='tasks',
+        help_text="Optional: For miscellaneous tasks without specific reference"
+    )
+
+    followup_date = models.DateField()
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='MEDIUM')
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='PENDING')
+
+    assigned_to = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_tasks')
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='created_tasks')
+
+    remarks = models.TextField(blank=True)
+    reminder_date = models.DateTimeField(null=True, blank=True)
+    is_reminded = models.BooleanField(default=False)
+
+    # Repeat functionality
+    is_recurring = models.BooleanField(default=False)
+    repeat_frequency = models.CharField(
+        max_length=20,
+        choices=REPEAT_FREQUENCY_CHOICES,
+        blank=True,
+        null=True
+    )
+    repeat_interval = models.PositiveIntegerField(default=1, help_text="Repeat every X days/weeks/months/years")
+    repeat_end_date = models.DateField(null=True, blank=True, help_text="When to stop repeating")
+    parent_task = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='recurring_instances')
+
+    followup_history = models.JSONField(default=list, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    is_deleted = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['followup_date', '-priority']
+
+    def clean(self):
+        """Validate that miscellaneous tasks can skip reference_id"""
+        from django.core.exceptions import ValidationError
+
+        # If task_regarding is NOT miscellaneous, reference_id is required
+        if self.task_regarding and self.task_regarding.upper() != 'MISCELLANEOUS' and not self.reference_id:
+            raise ValidationError({
+                'reference_id': f'Reference ID is required for {self.task_regarding} tasks in {self.get_module_display()}.'
+            })
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        if self.task_regarding and self.task_regarding.upper() == 'MISCELLANEOUS':
+            company_name = self.company.name if self.company else 'General'
+            return f"{self.title} [{self.module} - Miscellaneous - {company_name}]"
+        return f"{self.title} [{self.module} - {self.task_regarding} - {self.reference_id}]"
+
+
+class TaskAttachment(models.Model):
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='attachments')
+    file = models.FileField(upload_to='task_files/')
+    file_name = models.CharField(max_length=255, blank=True)
+
