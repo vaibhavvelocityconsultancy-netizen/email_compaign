@@ -5,6 +5,8 @@ venv/
 .venv/
 env/
 migrations/
+!campaigns/migrations/
+!campaigns/migrations/*.py
 .env
 db.sqlite3
 

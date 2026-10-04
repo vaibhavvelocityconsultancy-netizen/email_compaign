@@ -21,9 +21,11 @@ import hmac
 import re
 from datetime import datetime, timezone as dt_timezone
 
+from django.contrib.auth import get_user_model
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 import json
 
 from django.conf import settings
@@ -52,9 +54,10 @@ from campaigns.serializers import (
     OpportunityCreateSerializer,
     OpportunityModuleSerializer,
     QuotationSerializer,
+    TaskSerializer,
 )
 
-from .models import Batch, BatchLead, Channel, City, Company, CompanyContact, Country, MessageLog, Opportunity, OpportunityModule, Quotation, QuotationItem, Sequence, SequenceStep, State, MessageTemplate, Lead
+from .models import Batch, BatchLead, Channel, City, Company, CompanyContact, Country, MessageLog, Opportunity, OpportunityModule, Quotation, QuotationItem, Sequence, SequenceStep, State, MessageTemplate, Lead, Task, TaskAttachment
 
 # ------------------------------------- masters ----------------------
 
@@ -130,6 +133,134 @@ class CompanyContactDetailView(generics.RetrieveUpdateDestroyAPIView):
     def perform_destroy(self, instance):
         instance.is_active = False
         instance.save(update_fields=["is_active"])
+
+
+def _task_queryset_for_user(user):
+    queryset = Task.objects.filter(is_deleted=False).select_related(
+        "assigned_to", "created_by", "company", "parent_task"
+    ).prefetch_related("attachments", "recurring_instances")
+    if not (user.is_superuser or user.is_staff):
+        queryset = queryset.filter(Q(assigned_to=user) | Q(created_by=user))
+    return queryset
+
+
+def _add_task_attachments(task, request):
+    files = request.FILES.getlist("files")
+    names = request.data.getlist("file_names") if hasattr(request.data, "getlist") else []
+    for index, file in enumerate(files):
+        TaskAttachment.objects.create(
+            task=task,
+            file=file,
+            file_name=names[index] if index < len(names) and names[index] else file.name,
+        )
+
+
+class TaskListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def get(self, request):
+        tasks = _task_queryset_for_user(request.user)
+        for field in ("module", "status", "reference_id"):
+            value = request.query_params.get(field)
+            if value:
+                tasks = tasks.filter(**{field: value})
+        assigned_to = request.query_params.get("assigned_to")
+        if assigned_to:
+            tasks = tasks.filter(assigned_to_id=assigned_to)
+        return Response(TaskSerializer(tasks, many=True, context={"request": request}).data)
+
+    def post(self, request):
+        serializer = TaskSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        task = serializer.save(created_by=request.user)
+        _add_task_attachments(task, request)
+        return Response(
+            TaskSerializer(task, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class TaskDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def get_object(self, request, pk):
+        return get_object_or_404(_task_queryset_for_user(request.user), pk=pk)
+
+    def get(self, request, pk):
+        task = self.get_object(request, pk)
+        return Response(TaskSerializer(task, context={"request": request}).data)
+
+    def put(self, request, pk):
+        return self._update(request, pk, partial=False)
+
+    def patch(self, request, pk):
+        return self._update(request, pk, partial=True)
+
+    def _update(self, request, pk, partial):
+        task = self.get_object(request, pk)
+        serializer = TaskSerializer(
+            task,
+            data=request.data,
+            partial=partial,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        task = serializer.save()
+        history = list(task.followup_history or [])
+        history.append({
+            "id": len(history) + 1,
+            "followup_date": str(task.followup_date or ""),
+            "remark": task.remarks,
+            "updated_by": request.user.get_full_name() or request.user.get_username(),
+            "timestamp": timezone.now().strftime("%d-%m-%Y %H:%M:%S"),
+        })
+        task.followup_history = history
+        task.save(update_fields=["followup_history", "updated_at"])
+        _add_task_attachments(task, request)
+        return Response(TaskSerializer(task, context={"request": request}).data)
+
+    def delete(self, request, pk):
+        task = self.get_object(request, pk)
+        task.is_deleted = True
+        task.save(update_fields=["is_deleted", "updated_at"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class TaskOptionsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user_model = get_user_model()
+        users = user_model.objects.filter(is_active=True).order_by("first_name", "last_name")
+        companies = Company.objects.filter(is_active=True).order_by("name")
+        return Response({
+            "modules": [
+                {"value": value, "label": label}
+                for value, label in Task.MODULE_CHOICES
+            ],
+            "priorities": [
+                {"value": value, "label": label}
+                for value, label in Task.PRIORITY_CHOICES
+            ],
+            "statuses": [
+                {"value": value, "label": label}
+                for value, label in Task.STATUS_CHOICES
+            ],
+            "repeat_frequencies": [
+                {"value": value, "label": label}
+                for value, label in Task.REPEAT_FREQUENCY_CHOICES
+            ],
+            "users": [
+                {"value": user.pk, "label": user.get_full_name() or user.get_username()}
+                for user in users
+            ],
+            "companies": [
+                {"value": company.pk, "label": company.name}
+                for company in companies
+            ],
+        })
 
 
 class LeadCSVImportView(APIView):

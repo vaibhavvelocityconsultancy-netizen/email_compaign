@@ -19,6 +19,8 @@ from .models import (
     SequenceStep,
     State,
     Lead,
+    Task,
+    TaskAttachment,
 )
 
 # -------------------Masters - Country, State, City, Company, CompanyContact Serializer -------------------
@@ -940,3 +942,84 @@ class QuotationSerializer(serializers.ModelSerializer):
                 QuotationItem.objects.create(quotation=quotation, **item_data)
         return quotation
       
+
+
+
+# Task Serializers
+
+class TaskSerializer(serializers.ModelSerializer):
+    assigned_to_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    module_display = serializers.CharField(source='get_module_display', read_only=True)
+    company_name = serializers.CharField(source='company.name', read_only=True, allow_null=True, default=None)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+    repeat_frequency_display = serializers.CharField(source='get_repeat_frequency_display', read_only=True)
+    parent_task_title = serializers.CharField(source='parent_task.title', read_only=True)
+    recurring_instances_count = serializers.SerializerMethodField()
+    followup_history = serializers.JSONField(read_only=True)
+    attachments = serializers.SerializerMethodField()
+
+    def get_assigned_to_name(self, obj):
+        return obj.assigned_to.get_full_name() or obj.assigned_to.get_username() if obj.assigned_to else None
+
+    def get_created_by_name(self, obj):
+        return obj.created_by.get_full_name() or obj.created_by.get_username() if obj.created_by else None
+
+    def get_attachments(self, obj):
+        request = self.context.get('request')
+        attachments = []
+        for attachment in obj.attachments.all():
+            file_url = attachment.file.url if attachment.file else None
+            if file_url and request:
+                file_url = request.build_absolute_uri(file_url)
+            attachments.append({
+                'id': attachment.id,
+                'file_name': attachment.file_name,
+                'file_url': file_url,
+            })
+        return attachments
+
+    def get_recurring_instances_count(self, obj):
+        if obj.is_recurring:
+            return obj.recurring_instances.count()
+        return 0
+
+    def validate(self, data):
+        task_regarding = data.get('task_regarding', getattr(self.instance, 'task_regarding', ''))
+        reference_id = data.get('reference_id', getattr(self.instance, 'reference_id', ''))
+        if task_regarding and task_regarding.upper() != 'MISCELLANEOUS' and not reference_id:
+            raise serializers.ValidationError({
+                'reference_id': 'Reference ID is required unless the task is miscellaneous.'
+            })
+        return data
+
+    class Meta:
+        model = Task
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at', 'created_by']
+
+
+class TaskAttachmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TaskAttachment
+        fields = ['id', 'file', 'file_name']
+
+
+class TaskCreateSerializer(serializers.ModelSerializer):
+    attachments = TaskAttachmentSerializer(many=True, read_only=True)
+    company_name = serializers.CharField(source='company.name', read_only=True)
+
+    class Meta:
+        model = Task
+        fields = [
+            'title', 'description', 'module', 'reference_id',
+            'followup_date', 'priority', 'assigned_to',
+            'remarks', 'attachments', 'company', 'company_name', 'task_regarding',
+            'is_recurring', 'repeat_frequency', 'repeat_interval', 'repeat_end_date'
+        ]
+
+
+
+
+
