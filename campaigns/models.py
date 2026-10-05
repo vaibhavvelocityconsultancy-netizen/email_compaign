@@ -546,6 +546,14 @@ class Quotation(models.Model):
         blank=True,
     )
 
+    company = models.ForeignKey(
+        "Company",
+        on_delete=models.PROTECT,
+        related_name="quotations",
+        null=True,
+        blank=True,
+    )
+
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
@@ -659,6 +667,10 @@ class Quotation(models.Model):
     # --------------------------------------------------
 
     final_offer_generated = models.BooleanField(
+        default=False
+    )
+
+    cpo_created = models.BooleanField(
         default=False
     )
 
@@ -899,4 +911,3 @@ class TaskAttachment(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='attachments')
     file = models.FileField(upload_to='task_files/')
     file_name = models.CharField(max_length=255, blank=True)
-

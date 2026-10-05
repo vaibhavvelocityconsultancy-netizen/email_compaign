@@ -823,10 +823,44 @@ class QuotationItemSerializer(serializers.ModelSerializer):
         return data
 
 
+class FinalOfferItemUpdateSerializer(serializers.Serializer):
+    module = serializers.PrimaryKeyRelatedField(
+        queryset=OpportunityModule.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    module_name = serializers.CharField(required=False, allow_blank=True)
+    description = serializers.CharField(required=False, allow_blank=True)
+    requirements = serializers.CharField(required=False, allow_blank=True)
+    estimated_cost = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, allow_null=True, min_value=0
+    )
+    estimated_days = serializers.IntegerField(required=False, allow_null=True, min_value=0)
+    priority = serializers.ChoiceField(
+        choices=["LOW", "MEDIUM", "HIGH"], required=False
+    )
+    remarks = serializers.CharField(required=False, allow_blank=True)
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0)
+
+
+class FinalOfferUpdateSerializer(serializers.Serializer):
+    fo_date = serializers.DateField(
+        input_formats=["%Y-%m-%d", "%m-%d-%Y"],
+    )
+    items = FinalOfferItemUpdateSerializer(many=True)
+
+
 class QuotationSerializer(serializers.ModelSerializer):
     items = QuotationItemSerializer(many=True, required=False)
     company_name = serializers.SerializerMethodField()
+    company_id = serializers.SerializerMethodField()
+    selected_company_id = serializers.PrimaryKeyRelatedField(
+        queryset=Company.objects.filter(is_active=True),
+        write_only=True,
+        required=False,
+    )
     company_city = serializers.SerializerMethodField()
+    company_state = serializers.SerializerMethodField()
     project_name = serializers.CharField(required=False, allow_blank=True)
     created_by = serializers.IntegerField(source="created_by_id", read_only=True)
     created_by_name = serializers.SerializerMethodField()
@@ -846,7 +880,10 @@ class QuotationSerializer(serializers.ModelSerializer):
             "quotation_date",
             "opportunity",
             "company_name",
+            "company_id",
+            "selected_company_id",
             "company_city",
+            "company_state",
             "project_name",
             "status",
             "status_display",
@@ -867,6 +904,7 @@ class QuotationSerializer(serializers.ModelSerializer):
             "quotation_pdf",
             "pdf_ref_number",
             "final_offer_generated",
+            "cpo_created",
             "fo_date",
             "final_offer_pdf",
             "fo_as_ref",
@@ -879,8 +917,10 @@ class QuotationSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
+            "company_id",
             "status_display",
             "tax_type_display",
+            "cpo_created",
             "created_by",
             "created_by_name",
             "created_at",
@@ -892,6 +932,8 @@ class QuotationSerializer(serializers.ModelSerializer):
         return user.get_full_name() or user.get_username() if user else None
 
     def get_company_name(self, obj):
+        if obj.company_id:
+            return obj.company.name
         opportunity = obj.opportunity
         if opportunity is None:
             return ""
@@ -904,7 +946,23 @@ class QuotationSerializer(serializers.ModelSerializer):
             lead = None
         return lead.company.name if lead and lead.company else ""
 
+    def get_company_id(self, obj):
+        if obj.company_id:
+            return obj.company_id
+        opportunity = obj.opportunity
+        if opportunity is None:
+            return None
+        if opportunity.company_id:
+            return opportunity.company_id
+        try:
+            lead = opportunity.lead
+        except Lead.DoesNotExist:
+            lead = None
+        return lead.company_id if lead else None
+
     def get_company_city(self, obj):
+        if obj.company_id:
+            return obj.company.city.name if obj.company.city_id else ""
         opportunity = obj.opportunity
         company = opportunity.company if opportunity else None
         if company and company.city:
@@ -912,6 +970,18 @@ class QuotationSerializer(serializers.ModelSerializer):
         if opportunity and opportunity.lead and opportunity.lead.company and opportunity.lead.company.city:
             return opportunity.lead.company.city.name
         return ""
+
+    def get_company_state(self, obj):
+        company = obj.company
+        opportunity = obj.opportunity
+        if company is None and opportunity:
+            company = opportunity.company
+            if company is None:
+                try:
+                    company = opportunity.lead.company
+                except (Lead.DoesNotExist, AttributeError):
+                    company = None
+        return company.state.name if company and company.state_id else ""
 
     def validate(self, attrs):
         if attrs.get("discount", 0) < 0:
@@ -923,6 +993,9 @@ class QuotationSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         items_data = validated_data.pop("items", [])
+        selected_company = validated_data.pop("selected_company_id", None)
+        if selected_company is not None:
+            validated_data["company"] = selected_company
         request = self.context.get("request")
         user = getattr(request, "user", None)
         if user is None or not user.is_authenticated:
@@ -935,7 +1008,11 @@ class QuotationSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def update(self, instance, validated_data):
         items_data = validated_data.pop("items", None)
+        selected_company = validated_data.pop("selected_company_id", None)
         quotation = super().update(instance, validated_data)
+        if selected_company is not None:
+            quotation.company = selected_company
+            quotation.save(update_fields=["company", "updated_at"])
         if items_data is not None:
             quotation.items.all().delete()
             for item_data in items_data:
@@ -1018,7 +1095,6 @@ class TaskCreateSerializer(serializers.ModelSerializer):
             'remarks', 'attachments', 'company', 'company_name', 'task_regarding',
             'is_recurring', 'repeat_frequency', 'repeat_interval', 'repeat_end_date'
         ]
-
 
 
 

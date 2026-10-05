@@ -1,10 +1,12 @@
 import csv
 import io
+from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .models import (
@@ -23,6 +25,7 @@ from .models import (
     QuotationItem,
     Sequence,
     State,
+    Task,
 )
 from .serializers import LeadSerializer
 
@@ -124,6 +127,49 @@ class FinalOfferGenerationTests(TestCase):
         quotation.refresh_from_db()
         self.assertTrue(quotation.final_offer_generated)
         self.assertTrue(quotation.final_offer_pdf.name)
+
+
+class CpoCreationTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="cpocreator",
+            email="cpo@example.com",
+            password="test-password",
+        )
+        self.quotation = Quotation.objects.create(
+            quotation_number="QT-CPO-1001",
+            quotation_date="2026-10-01",
+            created_by=self.user,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_create_cpo_marks_quotation_and_is_idempotent(self):
+        url = f"/api/quotations/{self.quotation.id}/create-cpo/"
+
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, {"message": "CPO created", "cpo_created": True})
+        self.quotation.refresh_from_db()
+        self.assertTrue(self.quotation.cpo_created)
+
+        repeated_response = self.client.post(url)
+
+        self.assertEqual(repeated_response.status_code, 200)
+        self.assertEqual(
+            repeated_response.data,
+            {"message": "CPO already created", "cpo_created": True},
+        )
+
+    def test_create_cpo_requires_authentication(self):
+        client = APIClient()
+
+        response = client.post(f"/api/quotations/{self.quotation.id}/create-cpo/")
+
+        self.assertEqual(response.status_code, 401)
+        self.quotation.refresh_from_db()
+        self.assertFalse(self.quotation.cpo_created)
 
 
 class LeadSerializerTests(TestCase):
@@ -444,3 +490,71 @@ class CampaignSequenceAPITests(TestCase):
 
 		self.assertIsNone(lead.email)
 		self.assertTrue(lead.whatsapp_opt_in)
+
+
+class TaskActivitiesAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = get_user_model().objects.create_user(
+            username="activity-user",
+            password="StrongPass123!",
+        )
+        self.other_user = get_user_model().objects.create_user(
+            username="other-activity-user",
+            password="StrongPass123!",
+        )
+        self.client.force_authenticate(user=self.user)
+        self.today = timezone.localdate()
+
+    def create_task(self, title, followup_date, status="PENDING", **kwargs):
+        return Task.objects.create(
+            title=title,
+            module="LEAD",
+            task_regarding="MISCELLANEOUS",
+            followup_date=followup_date,
+            status=status,
+            created_by=self.user,
+            **kwargs,
+        )
+
+    def test_returns_task_groups_and_hides_other_users_tasks(self):
+        today_task = self.create_task("Today", self.today, assigned_to=self.user)
+        upcoming_task = self.create_task("Upcoming", self.today + timedelta(days=3))
+        overdue_task = self.create_task(
+            "Overdue",
+            self.today - timedelta(days=1),
+            status="IN_PROGRESS",
+            assigned_to=self.user,
+        )
+        recurring_task = self.create_task(
+            "Recurring",
+            self.today + timedelta(days=30),
+            status="COMPLETED",
+            is_recurring=True,
+        )
+        hidden_task = Task.objects.create(
+            title="Private task",
+            module="LEAD",
+            task_regarding="MISCELLANEOUS",
+            followup_date=self.today,
+            status="PENDING",
+            created_by=self.other_user,
+            assigned_to=self.other_user,
+        )
+
+        response = self.client.get("/api/tasks/activities/")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["today"]["count"], 1)
+        self.assertEqual(response.data["today"]["tasks"][0]["id"], today_task.id)
+        self.assertEqual(response.data["upcoming"]["count"], 1)
+        self.assertEqual(response.data["upcoming"]["tasks"][0]["id"], upcoming_task.id)
+        self.assertEqual(response.data["overdue"]["count"], 1)
+        self.assertEqual(response.data["overdue"]["tasks"][0]["id"], overdue_task.id)
+        self.assertEqual(response.data["recurring"]["count"], 1)
+        self.assertEqual(response.data["recurring"]["tasks"][0]["id"], recurring_task.id)
+        self.assertNotIn(hidden_task.id, [
+            task["id"]
+            for group in response.data.values()
+            for task in group["tasks"]
+        ])

@@ -10,7 +10,7 @@ from django.views import View
 from rest_framework.response import Response
 from rest_framework import generics, viewsets, status
 
-from rest_framework.decorators import action, api_view
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 
 # Create your views here.
@@ -19,7 +19,7 @@ import csv
 import hashlib
 import hmac
 import re
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime, timedelta, timezone as dt_timezone
 
 from django.contrib.auth import get_user_model
 from rest_framework.views import APIView
@@ -35,7 +35,6 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
-
 
 
 from campaigns.serializers import (
@@ -54,15 +53,37 @@ from campaigns.serializers import (
     OpportunityCreateSerializer,
     OpportunityModuleSerializer,
     QuotationSerializer,
+    FinalOfferUpdateSerializer,
     TaskSerializer,
 )
 
-from .models import Batch, BatchLead, Channel, City, Company, CompanyContact, Country, MessageLog, Opportunity, OpportunityModule, Quotation, QuotationItem, Sequence, SequenceStep, State, MessageTemplate, Lead, Task, TaskAttachment
+from .models import (
+    Batch,
+    BatchLead,
+    Channel,
+    City,
+    Company,
+    CompanyContact,
+    Country,
+    MessageLog,
+    Opportunity,
+    OpportunityModule,
+    Quotation,
+    QuotationItem,
+    Sequence,
+    SequenceStep,
+    State,
+    MessageTemplate,
+    Lead,
+    Task,
+    TaskAttachment,
+)
 
 # ------------------------------------- masters ----------------------
 
 
-# company 
+# company
+
 
 class CountryViewSet(viewsets.ModelViewSet):
     queryset = Country.objects.all()
@@ -81,13 +102,19 @@ class CityViewSet(viewsets.ModelViewSet):
 
 class CompanyListView(APIView):
     def get(self, request):
-        companies = Company.objects.filter(is_active=True).annotate(
-            contacts_count=Count("contacts", filter=Q(contacts__is_active=True))
-        ).order_by("name")
-        return Response({
-            "count": companies.count(),
-            "results": CompanySerializer(companies, many=True).data,
-        })
+        companies = (
+            Company.objects.filter(is_active=True)
+            .annotate(
+                contacts_count=Count("contacts", filter=Q(contacts__is_active=True))
+            )
+            .order_by("name")
+        )
+        return Response(
+            {
+                "count": companies.count(),
+                "results": CompanySerializer(companies, many=True).data,
+            }
+        )
 
     def post(self, request):
         serializer = CompanySerializer(data=request.data)
@@ -107,7 +134,9 @@ class CompanyDetailView(generics.RetrieveUpdateAPIView):
 class CompanyContactListCreateView(APIView):
     def get(self, request, company_id):
         company = get_object_or_404(Company, pk=company_id, is_active=True)
-        contacts = company.contacts.filter(is_active=True).order_by("-is_primary", "name")
+        contacts = company.contacts.filter(is_active=True).order_by(
+            "-is_primary", "name"
+        )
         return Response(CompanyContactSerializer(contacts, many=True).data)
 
     def post(self, request, company_id):
@@ -136,9 +165,11 @@ class CompanyContactDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 def _task_queryset_for_user(user):
-    queryset = Task.objects.filter(is_deleted=False).select_related(
-        "assigned_to", "created_by", "company", "parent_task"
-    ).prefetch_related("attachments", "recurring_instances")
+    queryset = (
+        Task.objects.filter(is_deleted=False)
+        .select_related("assigned_to", "created_by", "company", "parent_task")
+        .prefetch_related("attachments", "recurring_instances")
+    )
     if not (user.is_superuser or user.is_staff):
         queryset = queryset.filter(Q(assigned_to=user) | Q(created_by=user))
     return queryset
@@ -146,12 +177,16 @@ def _task_queryset_for_user(user):
 
 def _add_task_attachments(task, request):
     files = request.FILES.getlist("files")
-    names = request.data.getlist("file_names") if hasattr(request.data, "getlist") else []
+    names = (
+        request.data.getlist("file_names") if hasattr(request.data, "getlist") else []
+    )
     for index, file in enumerate(files):
         TaskAttachment.objects.create(
             task=task,
             file=file,
-            file_name=names[index] if index < len(names) and names[index] else file.name,
+            file_name=(
+                names[index] if index < len(names) and names[index] else file.name
+            ),
         )
 
 
@@ -168,7 +203,9 @@ class TaskListCreateView(APIView):
         assigned_to = request.query_params.get("assigned_to")
         if assigned_to:
             tasks = tasks.filter(assigned_to_id=assigned_to)
-        return Response(TaskSerializer(tasks, many=True, context={"request": request}).data)
+        return Response(
+            TaskSerializer(tasks, many=True, context={"request": request}).data
+        )
 
     def post(self, request):
         serializer = TaskSerializer(data=request.data, context={"request": request})
@@ -209,13 +246,16 @@ class TaskDetailView(APIView):
         serializer.is_valid(raise_exception=True)
         task = serializer.save()
         history = list(task.followup_history or [])
-        history.append({
-            "id": len(history) + 1,
-            "followup_date": str(task.followup_date or ""),
-            "remark": task.remarks,
-            "updated_by": request.user.get_full_name() or request.user.get_username(),
-            "timestamp": timezone.now().strftime("%d-%m-%Y %H:%M:%S"),
-        })
+        history.append(
+            {
+                "id": len(history) + 1,
+                "followup_date": str(task.followup_date or ""),
+                "remark": task.remarks,
+                "updated_by": request.user.get_full_name()
+                or request.user.get_username(),
+                "timestamp": timezone.now().strftime("%d-%m-%Y %H:%M:%S"),
+            }
+        )
         task.followup_history = history
         task.save(update_fields=["followup_history", "updated_at"])
         _add_task_attachments(task, request)
@@ -233,34 +273,85 @@ class TaskOptionsView(APIView):
 
     def get(self, request):
         user_model = get_user_model()
-        users = user_model.objects.filter(is_active=True).order_by("first_name", "last_name")
+        users = user_model.objects.filter(is_active=True).order_by(
+            "first_name", "last_name"
+        )
         companies = Company.objects.filter(is_active=True).order_by("name")
-        return Response({
-            "modules": [
-                {"value": value, "label": label}
-                for value, label in Task.MODULE_CHOICES
-            ],
-            "priorities": [
-                {"value": value, "label": label}
-                for value, label in Task.PRIORITY_CHOICES
-            ],
-            "statuses": [
-                {"value": value, "label": label}
-                for value, label in Task.STATUS_CHOICES
-            ],
-            "repeat_frequencies": [
-                {"value": value, "label": label}
-                for value, label in Task.REPEAT_FREQUENCY_CHOICES
-            ],
-            "users": [
-                {"value": user.pk, "label": user.get_full_name() or user.get_username()}
-                for user in users
-            ],
-            "companies": [
-                {"value": company.pk, "label": company.name}
-                for company in companies
-            ],
-        })
+        return Response(
+            {
+                "modules": [
+                    {"value": value, "label": label}
+                    for value, label in Task.MODULE_CHOICES
+                ],
+                "priorities": [
+                    {"value": value, "label": label}
+                    for value, label in Task.PRIORITY_CHOICES
+                ],
+                "statuses": [
+                    {"value": value, "label": label}
+                    for value, label in Task.STATUS_CHOICES
+                ],
+                "repeat_frequencies": [
+                    {"value": value, "label": label}
+                    for value, label in Task.REPEAT_FREQUENCY_CHOICES
+                ],
+                "users": [
+                    {
+                        "value": user.pk,
+                        "label": user.get_full_name() or user.get_username(),
+                    }
+                    for user in users
+                ],
+                "companies": [
+                    {"value": company.pk, "label": company.name}
+                    for company in companies
+                ],
+            }
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_activities(request):
+    today = timezone.localdate()
+    next_week = today + timedelta(days=7)
+    user = request.user
+    role_code = getattr(getattr(user, "role", None), "code", None)
+    can_view_all = (
+        user.is_superuser or user.is_staff or role_code in {"superadmin", "manager"}
+    )
+
+    base_queryset = Task.objects.filter(is_deleted=False)
+    if not can_view_all:
+        base_queryset = base_queryset.filter(Q(assigned_to=user) | Q(created_by=user))
+
+    task_groups = {
+        "today": base_queryset.filter(followup_date=today, status="PENDING"),
+        "upcoming": base_queryset.filter(
+            followup_date__gt=today,
+            followup_date__lte=next_week,
+            status="PENDING",
+        ),
+        "overdue": base_queryset.filter(
+            followup_date__lt=today,
+            status__in=["PENDING", "IN_PROGRESS"],
+        ),
+        "recurring": base_queryset.filter(is_recurring=True),
+    }
+
+    response_data = {}
+    for group_name, queryset in task_groups.items():
+        tasks = queryset.select_related(
+            "assigned_to", "created_by", "company", "parent_task"
+        ).prefetch_related("attachments", "recurring_instances")
+        response_data[group_name] = {
+            "count": queryset.count(),
+            "tasks": TaskSerializer(
+                tasks, many=True, context={"request": request}
+            ).data,
+        }
+
+    return Response(response_data)
 
 
 class LeadCSVImportView(APIView):
@@ -269,14 +360,13 @@ class LeadCSVImportView(APIView):
 
         if not csv_file:
             return Response(
-                {"error": "CSV file is required."},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "CSV file is required."}, status=status.HTTP_400_BAD_REQUEST
             )
 
         if not csv_file.name.lower().endswith(".csv"):
             return Response(
                 {"error": "Only CSV files are allowed."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
@@ -293,7 +383,7 @@ class LeadCSVImportView(APIView):
                         "error": "Missing required columns.",
                         "missing_columns": list(missing_columns),
                     },
-                    status=status.HTTP_400_BAD_REQUEST
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
             total_rows = 0
@@ -312,7 +402,9 @@ class LeadCSVImportView(APIView):
                     "company_country": (row.get("company_country") or "India").strip(),
                     "company_gst_number": (row.get("company_gst_number") or "").strip(),
                     "contact_name": (row.get("contact_name") or "").strip(),
-                    "contact_designation": (row.get("contact_designation") or "").strip(),
+                    "contact_designation": (
+                        row.get("contact_designation") or ""
+                    ).strip(),
                     "contact_mobile": (row.get("contact_mobile") or "").strip(),
                     "contact_email": (row.get("contact_email") or "").strip(),
                     "enquiry_for": (row.get("enquiry_for") or "").strip().upper(),
@@ -321,7 +413,8 @@ class LeadCSVImportView(APIView):
                     "status": (row.get("status") or "NEW").strip().upper(),
                     "followup_date": (row.get("followup_date") or "").strip() or None,
                     "followup_remarks": (row.get("followup_remarks") or "").strip(),
-                    "is_opportunity": (row.get("is_opportunity") or "").strip().lower() in {"1", "true", "yes", "y"},
+                    "is_opportunity": (row.get("is_opportunity") or "").strip().lower()
+                    in {"1", "true", "yes", "y"},
                 }
                 serializer = LeadSerializer(data=data)
                 if not serializer.is_valid():
@@ -338,14 +431,15 @@ class LeadCSVImportView(APIView):
                     "duplicates": duplicates,
                     "invalid": invalid,
                 },
-                status=status.HTTP_201_CREATED
+                status=status.HTTP_201_CREATED,
             )
 
         except UnicodeDecodeError:
             return Response(
                 {"error": "CSV must be UTF-8 encoded."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
+
 
 class LeadOptionsView(APIView):
     def get(self, request):
@@ -365,17 +459,16 @@ class LeadOptionsView(APIView):
 class LeadListView(APIView):
 
     def get(self, request):
-        leads = Lead.objects.filter(is_active=True, is_opportunity=False).select_related(
-            "company", "contact"
-        ).order_by("-enquiry_date", "-created_at")
+        leads = (
+            Lead.objects.filter(is_active=True, is_opportunity=False)
+            .select_related("company", "contact")
+            .order_by("-enquiry_date", "-created_at")
+        )
         serializer = LeadSerializer(leads, many=True)
 
         return Response(
-            {
-                "count": leads.count(),
-                "results": serializer.data
-            },
-            status=status.HTTP_200_OK
+            {"count": leads.count(), "results": serializer.data},
+            status=status.HTTP_200_OK,
         )
 
     def post(self, request):
@@ -391,7 +484,7 @@ class LeadDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def perform_destroy(self, instance):
         instance.is_active = False
-        instance.save(update_fields=['is_active', 'updated_at'])
+        instance.save(update_fields=["is_active", "updated_at"])
 
 
 class OpportunityListCreateView(generics.ListCreateAPIView):
@@ -401,7 +494,7 @@ class OpportunityListCreateView(generics.ListCreateAPIView):
 
 class OpportunityDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Opportunity.objects.filter(is_active=True).prefetch_related("modules")
-    serializer_class = OpportunityCreateSerializer 
+    serializer_class = OpportunityCreateSerializer
 
     def perform_destroy(self, instance):
         instance.is_active = False
@@ -423,15 +516,16 @@ class OpportunityModuleListCreateView(generics.ListCreateAPIView):
             opportunity_id=self.kwargs["opportunity_id"],
             opportunity__is_active=True,
         ).order_by("module_number")
-        
 
     def perform_create(self, serializer):
         opportunity = self.get_opportunity()
         module_number = serializer.validated_data.get("module_number")
         if module_number is None:
-            last_number = opportunity.modules.order_by("-module_number").values_list(
-                "module_number", flat=True
-            ).first()
+            last_number = (
+                opportunity.modules.order_by("-module_number")
+                .values_list("module_number", flat=True)
+                .first()
+            )
             module_number = (last_number or 0) + 1
         serializer.save(opportunity=opportunity, module_number=module_number)
 
@@ -448,8 +542,7 @@ class OpportunityModuleDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class QuotationListCreateView(generics.ListCreateAPIView):
     queryset = (
-        Quotation.objects
-        .select_related("opportunity", "created_by")
+        Quotation.objects.select_related("opportunity", "created_by")
         .prefetch_related("items__module")
         .all()
     )
@@ -473,14 +566,10 @@ class QuotationListCreateView(generics.ListCreateAPIView):
             )
         return queryset.order_by("-created_at")
 
-    def perform_create(self, serializer):
-        serializer.save()
-
 
 class QuotationDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = (
-        Quotation.objects
-        .select_related("opportunity", "created_by")
+        Quotation.objects.select_related("opportunity", "created_by")
         .prefetch_related("items__module")
         .all()
     )
@@ -488,8 +577,36 @@ class QuotationDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated]
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@transaction.atomic
+def create_cpo(request, quotation_id):
+    quotation = get_object_or_404(
+        Quotation.objects.select_for_update(),
+        pk=quotation_id,
+    )
+    already_created = quotation.cpo_created
+    if not already_created:
+        quotation.cpo_created = True
+        quotation.save(update_fields=["cpo_created", "updated_at"])
+
+    return Response(
+        {
+            "message": "CPO already created" if already_created else "CPO created",
+            "cpo_created": quotation.cpo_created,
+        }
+    )
+
+
 def _generate_final_offer_pdf_bytes(quotation):
-    company = quotation.opportunity.company if quotation.opportunity else None
+    company = quotation.company or (
+        quotation.opportunity.company if quotation.opportunity else None
+    )
+    if company is None and quotation.opportunity:
+        try:
+            company = quotation.opportunity.lead.company
+        except (Lead.DoesNotExist, AttributeError):
+            company = None
     company_name = company.name if company else "N/A"
     city_name = company.city.name if company and company.city else "N/A"
     file_name = f"FINAL-OFFER-{quotation.quotation_number}.pdf"
@@ -515,7 +632,11 @@ def _generate_final_offer_pdf_bytes(quotation):
     pdf.setFont("Helvetica-Bold", 11)
     pdf.drawString(72, height - 118, "FO Date:")
     pdf.setFont("Helvetica", 11)
-    pdf.drawString(160, height - 118, (quotation.fo_date or timezone.now().date()).strftime("%d-%m-%Y"))
+    pdf.drawString(
+        160,
+        height - 118,
+        (quotation.fo_date or timezone.now().date()).strftime("%d-%m-%Y"),
+    )
 
     pdf.setFont("Helvetica-Bold", 11)
     pdf.drawString(72, height - 138, "City:")
@@ -552,7 +673,7 @@ def _generate_final_offer_pdf_bytes(quotation):
     pdf.setFont("Helvetica-Bold", 11)
     pdf.drawString(72, 90, "Terms & Conditions:")
     pdf.setFont("Helvetica", 9)
-    terms = (quotation.terms_conditions or "Standard quotation terms apply.")
+    terms = quotation.terms_conditions or "Standard quotation terms apply."
     for offset, line in enumerate(wrap(terms, width=110)[:6]):
         pdf.drawString(72, 72 + (offset * -12), line)
 
@@ -573,7 +694,14 @@ class GenerateFinalOfferView(generics.GenericAPIView):
         quotation.final_offer_generated = True
         quotation.fo_date = quotation.fo_date or timezone.now().date()
         quotation.final_offer_pdf.save(file_name, ContentFile(pdf_bytes), save=False)
-        quotation.save(update_fields=["final_offer_generated", "fo_date", "final_offer_pdf", "updated_at"])
+        quotation.save(
+            update_fields=[
+                "final_offer_generated",
+                "fo_date",
+                "final_offer_pdf",
+                "updated_at",
+            ]
+        )
 
         if (
             request.headers.get("Accept", "").lower().find("application/pdf") >= 0
@@ -587,81 +715,180 @@ class GenerateFinalOfferView(generics.GenericAPIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+class UpdateFinalOfferView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def patch(self, request, pk):
+        quotation = get_object_or_404(
+            Quotation.objects.select_for_update().select_related(
+                "company", "company__city", "company__state", "opportunity"
+            ),
+            pk=pk,
+        )
+        serializer = FinalOfferUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        items_data = serializer.validated_data["items"]
+
+        for item_data in items_data:
+            module = item_data.get("module")
+            if (
+                module
+                and quotation.opportunity_id
+                and module.opportunity_id != quotation.opportunity_id
+            ):
+                return Response(
+                    {
+                        "items": "An item module must belong to this quotation's opportunity."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        quotation.items.all().delete()
+        for item_data in items_data:
+            item_data = dict(item_data)
+            module = item_data.pop("module", None)
+            module_name = item_data.pop("module_name", "")
+            QuotationItem.objects.create(
+                quotation=quotation,
+                module=module,
+                module_name=module_name or (module.module_name if module else ""),
+                **item_data,
+            )
+
+        subtotal = sum(
+            (item.amount for item in quotation.items.all()),
+            Decimal("0.00"),
+        )
+        taxable_amount = max(
+            subtotal - Decimal(quotation.discount or 0), Decimal("0.00")
+        )
+        tax_amount = (
+            taxable_amount * Decimal(quotation.tax_percentage or 0) / Decimal("100")
+        )
+        cgst_amount = (
+            tax_amount / 2 if quotation.tax_type == "INTRA_STATE" else Decimal("0.00")
+        )
+        sgst_amount = cgst_amount
+        igst_amount = (
+            tax_amount
+            if quotation.tax_type and quotation.tax_type != "INTRA_STATE"
+            else Decimal("0.00")
+        )
+
+        quotation.fo_date = serializer.validated_data["fo_date"]
+        quotation.subtotal = subtotal
+        quotation.taxable_amount = taxable_amount
+        quotation.tax_amount = tax_amount
+        quotation.cgst_amount = cgst_amount
+        quotation.sgst_amount = sgst_amount
+        quotation.igst_amount = igst_amount
+        quotation.total_amount = (
+            taxable_amount + tax_amount + Decimal(quotation.packing_charges or 0)
+        )
+        quotation.final_offer_generated = True
+        pdf_bytes, file_name = _generate_final_offer_pdf_bytes(quotation)
+        old_pdf_name = (
+            quotation.final_offer_pdf.name if quotation.final_offer_pdf else None
+        )
+        quotation.final_offer_pdf.save(file_name, ContentFile(pdf_bytes), save=False)
+        quotation.save(
+            update_fields=[
+                "fo_date",
+                "subtotal",
+                "taxable_amount",
+                "tax_amount",
+                "cgst_amount",
+                "sgst_amount",
+                "igst_amount",
+                "total_amount",
+                "final_offer_generated",
+                "final_offer_pdf",
+                "updated_at",
+            ]
+        )
+        if old_pdf_name and old_pdf_name != quotation.final_offer_pdf.name:
+            quotation.final_offer_pdf.storage.delete(old_pdf_name)
+
+        return Response(
+            QuotationSerializer(quotation, context={"request": request}).data,
+            status=status.HTTP_200_OK,
+        )
+
+
 class EmailLogListView(APIView):
     def get(self, request):
-        logs = MessageLog.objects.select_related(
-            "batch_lead", "template"
-        ).order_by("-sent_at")
+        logs = MessageLog.objects.select_related("batch_lead", "template").order_by(
+            "-sent_at"
+        )
         serializer = MessageLogSerializer(logs, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
-        
 
 
 class EmailTemplateViewSet(viewsets.ModelViewSet):
     queryset = MessageTemplate.objects.all()
     serializer_class = MessageTemplateSerializer
-    
+
     def perform_create(self, serializer):
-         serializer.save()
-        #  logger.info(f"Email template '{serializer.instance.name}' created by user '{self.request.user.username}'.")
-        
-        
+        serializer.save()
+
+    #  logger.info(f"Email template '{serializer.instance.name}' created by user '{self.request.user.username}'.")
+
+
 class EmailSequenceViewSet(viewsets.ModelViewSet):
     queryset = Sequence.objects.all()
     serializer_class = SequenceSerializer
-    
+
     def perform_create(self, serializer):
         serializer.save()
         # logger.info(f"Email sequence '{serializer.instance.name}' created by user '{self.request.user.username}'.")
-        
-        
+
+
 class EmailSequenceStepViewSet(viewsets.ModelViewSet):
     queryset = SequenceStep.objects.all()
     serializer_class = SequenceStepSerializer
-    
+
     def perform_create(self, serializer):
         serializer.save()
         # logger.info(f"Email sequence step '{serializer.instance.step_number}' for sequence '{serializer.instance.sequence.name}' created by user '{self.request.user.username}'.")
-        
-        
+
+
 class BatchViewSet(viewsets.ModelViewSet):
     queryset = Batch.objects.all()
     serializer_class = BatchSerializer
-    
+
     def perform_create(self, serializer):
         serializer.save()
-        
-        
-    @action(detail=True, methods=['get'], url_path='leads')
+
+    @action(detail=True, methods=["get"], url_path="leads")
     def get_batch_leads(self, request, pk=None):
         batch = self.get_object()
         leads = batch.batch_leads.all()
         serializer = BatchLeadSerializer(leads, many=True)
         return Response(serializer.data)
-        
 
-    @action(detail=True, methods=['patch'], url_path='pause', url_name='pause')
+    @action(detail=True, methods=["patch"], url_path="pause", url_name="pause")
     def pause_batch(self, request, pk=None):
         batch = self.get_object()
         batch.status = Batch.Status.PAUSED
         batch.save()
         return Response({"status": "Batch paused."}, status=status.HTTP_200_OK)
-    
-    
-    @action(detail=True, methods=['patch'], url_path='resume')
+
+    @action(detail=True, methods=["patch"], url_path="resume")
     def resume(self, request, pk=None):
         batch = self.get_object()
         batch.status = Batch.Status.ACTIVE
-        batch.save(update_fields=['status'])
-        return Response({'status': batch.status}, status=status.HTTP_200_OK)
-
-
+        batch.save(update_fields=["status"])
+        return Response({"status": batch.status}, status=status.HTTP_200_OK)
 
 
 # webhook
 
+
 def _is_valid_mailgun_signature(signature_data):
-    signing_key = getattr(settings, "ANYMAIL", {}).get("MAILGUN_WEBHOOK_SIGNING_KEY", "")
+    signing_key = getattr(settings, "ANYMAIL", {}).get(
+        "MAILGUN_WEBHOOK_SIGNING_KEY", ""
+    )
     timestamp = str(signature_data.get("timestamp", ""))
     token = str(signature_data.get("token", ""))
     signature = str(signature_data.get("signature", ""))
@@ -681,10 +908,7 @@ def _is_valid_mailgun_signature(signature_data):
 def mailgun_webhook(request):
 
     if request.method != "POST":
-        return JsonResponse(
-            {"error": "POST method required"},
-            status=405
-        )
+        return JsonResponse({"error": "POST method required"}, status=405)
 
     try:
         data = json.loads(request.body)
@@ -713,24 +937,29 @@ def mailgun_webhook(request):
         new_status = event_status_map.get(event)
 
         if not new_status:
-            return JsonResponse({
-                "status": "ignored",
-                "event": event,
-                "message": "Event is not handled"
-            })
+            return JsonResponse(
+                {"status": "ignored", "event": event, "message": "Event is not handled"}
+            )
 
-        message_id = event_data.get("message", {}).get("headers", {}).get("message-id", "")
+        message_id = (
+            event_data.get("message", {}).get("headers", {}).get("message-id", "")
+        )
         message_id = message_id.strip().strip("<>").lower()
-        email_log = MessageLog.objects.filter(
-            channel=Channel.EMAIL,
-            provider_message_id=message_id,
-        ).first() if message_id else None
+        email_log = (
+            MessageLog.objects.filter(
+                channel=Channel.EMAIL,
+                provider_message_id=message_id,
+            ).first()
+            if message_id
+            else None
+        )
 
         # Fall back to recipient for legacy events without a message ID.
         if not email_log:
             email_log = (
-                MessageLog.objects
-                .filter(channel=Channel.EMAIL, to_address__iexact=recipient)
+                MessageLog.objects.filter(
+                    channel=Channel.EMAIL, to_address__iexact=recipient
+                )
                 .order_by("-sent_at")
                 .first()
             )
@@ -738,20 +967,15 @@ def mailgun_webhook(request):
         if not email_log:
             print("MessageLog not found for:", recipient)
 
-            return JsonResponse({
-                "status": "not_found",
-                "event": event,
-                "recipient": recipient
-            })
+            return JsonResponse(
+                {"status": "not_found", "event": event, "recipient": recipient}
+            )
 
         # Update status
         email_log.status = new_status
         email_log.save(update_fields=["status"])
 
-        print(
-            f"MessageLog {email_log.id} updated: "
-            f"{recipient} → {new_status}"
-        )
+        print(f"MessageLog {email_log.id} updated: " f"{recipient} → {new_status}")
 
         # If unsubscribed, also update BatchLead
         if event == "unsubscribed":
@@ -760,36 +984,38 @@ def mailgun_webhook(request):
             batch_lead.unsubscribed = True
             batch_lead.save(update_fields=["unsubscribed"])
 
-        return JsonResponse({
-            "status": "updated",
-            "event": event,
-            "recipient": recipient,
-            "email_log_id": email_log.id,
-            "message_log_id": email_log.id,
-            "message_status": new_status,
-        })
+        return JsonResponse(
+            {
+                "status": "updated",
+                "event": event,
+                "recipient": recipient,
+                "email_log_id": email_log.id,
+                "message_log_id": email_log.id,
+                "message_status": new_status,
+            }
+        )
 
     except json.JSONDecodeError:
-        return JsonResponse({
-            "status": "error",
-            "error": "Invalid JSON payload"
-        }, status=400)
+        return JsonResponse(
+            {"status": "error", "error": "Invalid JSON payload"}, status=400
+        )
 
     except Exception as e:
         print("Mailgun webhook error:", str(e))
 
-        return JsonResponse({
-            "status": "error",
-            "error": str(e),
-        }, status=400)
-        
+        return JsonResponse(
+            {
+                "status": "error",
+                "error": str(e),
+            },
+            status=400,
+        )
+
+
 @csrf_exempt
 def mailgun_inbound_webhook(request):
     if request.method != "POST":
-        return JsonResponse(
-            {"error": "POST method required"},
-            status=405
-        )
+        return JsonResponse({"error": "POST method required"}, status=405)
 
     signature_data = {
         "timestamp": request.POST.get("timestamp", ""),
@@ -810,49 +1036,50 @@ def mailgun_inbound_webhook(request):
         print("Body:", body)
 
         # Find the lead who replied
-        batch_lead = BatchLead.objects.filter(
-            email__iexact=sender
-        ).first()
+        batch_lead = BatchLead.objects.filter(email__iexact=sender).first()
 
         if not batch_lead:
-            return JsonResponse({
-                "status": "ignored",
-                "message": "No matching lead found",
-                "sender": sender
-            })
+            return JsonResponse(
+                {
+                    "status": "ignored",
+                    "message": "No matching lead found",
+                    "sender": sender,
+                }
+            )
 
         # Mark lead as replied
         batch_lead.replied = True
         batch_lead.replied_at = timezone.now()
 
         # Stop future emails
-        batch_lead.save(
-            update_fields=["replied", "replied_at"]
-        )
+        batch_lead.save(update_fields=["replied", "replied_at"])
 
         # Update latest email log
-        latest_log = MessageLog.objects.filter(
-            batch_lead=batch_lead,
-            channel=Channel.EMAIL,
-        ).order_by("-sent_at").first()
+        latest_log = (
+            MessageLog.objects.filter(
+                batch_lead=batch_lead,
+                channel=Channel.EMAIL,
+            )
+            .order_by("-sent_at")
+            .first()
+        )
 
         if latest_log:
             latest_log.status = MessageLog.Status.REPLIED
             latest_log.save(update_fields=["status"])
 
-        return JsonResponse({
-            "status": "updated",
-            "sender": sender,
-            "batch_lead_id": batch_lead.id,
-            "email_log_id": latest_log.id if latest_log else None,
-            "message_log_id": latest_log.id if latest_log else None
-        })
+        return JsonResponse(
+            {
+                "status": "updated",
+                "sender": sender,
+                "batch_lead_id": batch_lead.id,
+                "email_log_id": latest_log.id if latest_log else None,
+                "message_log_id": latest_log.id if latest_log else None,
+            }
+        )
 
     except Exception as e:
-        return JsonResponse({
-            "status": "error",
-            "error": str(e)
-        }, status=400)
+        return JsonResponse({"status": "error", "error": str(e)}, status=400)
 
 
 @csrf_exempt
@@ -863,7 +1090,11 @@ def whatsapp_webhook(request):
         mode = request.GET.get("hub.mode", "")
         token = request.GET.get("hub.verify_token", "")
         challenge = request.GET.get("hub.challenge", "")
-        if mode == "subscribe" and verify_token and hmac.compare_digest(token, verify_token):
+        if (
+            mode == "subscribe"
+            and verify_token
+            and hmac.compare_digest(token, verify_token)
+        ):
             return HttpResponse(challenge, content_type="text/plain")
         return JsonResponse({"error": "Webhook verification failed."}, status=403)
 
@@ -872,9 +1103,12 @@ def whatsapp_webhook(request):
 
     app_secret = getattr(settings, "WHATSAPP_APP_SECRET", "")
     signature = request.headers.get("X-Hub-Signature-256", "")
-    expected_signature = "sha256=" + hmac.new(
-        app_secret.encode(), request.body, hashlib.sha256
-    ).hexdigest() if app_secret else ""
+    expected_signature = (
+        "sha256="
+        + hmac.new(app_secret.encode(), request.body, hashlib.sha256).hexdigest()
+        if app_secret
+        else ""
+    )
     if not expected_signature or not hmac.compare_digest(signature, expected_signature):
         return JsonResponse({"error": "Webhook signature is invalid."}, status=403)
 
@@ -917,8 +1151,10 @@ def whatsapp_webhook(request):
                 errors = provider_status.get("errors", [])
                 message_log.status = new_status
                 message_log.error = (
-                    errors[0].get("title") or errors[0].get("message", "")
-                ) if new_status == MessageLog.Status.FAILED and errors else ""
+                    (errors[0].get("title") or errors[0].get("message", ""))
+                    if new_status == MessageLog.Status.FAILED and errors
+                    else ""
+                )
                 message_log.save(update_fields=["status", "error"])
                 updated += 1
 
@@ -926,11 +1162,15 @@ def whatsapp_webhook(request):
                 sender = re.sub(r"\D", "", inbound_message.get("from", ""))
                 if not sender:
                     continue
-                batch_lead = BatchLead.objects.filter(
-                    phone__in=[sender, f"+{sender}"],
-                    replied=False,
-                    message_logs__channel=Channel.WHATSAPP,
-                ).distinct().first()
+                batch_lead = (
+                    BatchLead.objects.filter(
+                        phone__in=[sender, f"+{sender}"],
+                        replied=False,
+                        message_logs__channel=Channel.WHATSAPP,
+                    )
+                    .distinct()
+                    .first()
+                )
                 if not batch_lead:
                     continue
 
@@ -945,80 +1185,76 @@ def whatsapp_webhook(request):
                 batch_lead.replied_at = replied_at
                 batch_lead.save(update_fields=["replied", "replied_at"])
 
-                latest_log = MessageLog.objects.filter(
-                    batch_lead=batch_lead,
-                    channel=Channel.WHATSAPP,
-                ).order_by("-sent_at").first()
+                latest_log = (
+                    MessageLog.objects.filter(
+                        batch_lead=batch_lead,
+                        channel=Channel.WHATSAPP,
+                    )
+                    .order_by("-sent_at")
+                    .first()
+                )
                 if latest_log:
                     latest_log.status = MessageLog.Status.REPLIED
                     latest_log.save(update_fields=["status"])
                 replied += 1
 
     return JsonResponse({"status": "processed", "updated": updated, "replied": replied})
-  
-  
+
 
 # convert to opportunity
 
-@api_view(['POST'])
+
+@api_view(["POST"])
 def lead_convert_to_opportunity(request, lead_id):
-    lead = get_object_or_404(
-        Lead,
-        pk=lead_id,
-        is_active=True
-    )
+    lead = get_object_or_404(Lead, pk=lead_id, is_active=True)
 
     if lead.is_opportunity:
         return Response(
-            {
-                'error': 'Lead is already converted to an opportunity.'
-            },
-            status=status.HTTP_400_BAD_REQUEST
+            {"error": "Lead is already converted to an opportunity."},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
     opportunity = Opportunity.objects.create(
         lead=lead,
         company=lead.company,
         source=lead.source,
-        status='PROSPECTING',
+        status="PROSPECTING",
         is_converted_from_lead=True,
         converted_at=timezone.now(),
         converted_by=request.user if request.user.is_authenticated else None,
     )
 
     lead.is_opportunity = True
-    lead.save(update_fields=['is_opportunity', 'updated_at'])
+    lead.save(update_fields=["is_opportunity", "updated_at"])
 
     return Response(
         {
-            'message': 'Lead converted to opportunity successfully',
-            'opportunity_id': opportunity.id,
-            'is_opportunity': lead.is_opportunity,
-            'is_converted_from_lead': opportunity.is_converted_from_lead,
-            'company_name': lead.company.name,
+            "message": "Lead converted to opportunity successfully",
+            "opportunity_id": opportunity.id,
+            "is_opportunity": lead.is_opportunity,
+            "is_converted_from_lead": opportunity.is_converted_from_lead,
+            "company_name": lead.company.name,
         },
-        status=status.HTTP_201_CREATED
+        status=status.HTTP_201_CREATED,
     )
-    
-    
+
     # convert to quotaitn
+
+
 def generate_quotation_number():
     year = timezone.now().year
 
     prefix = f"QT-{year}-"
 
     last_quotation = (
-        Quotation.objects
-        .filter(quotation_number__startswith=prefix)
+        Quotation.objects.filter(quotation_number__startswith=prefix)
         .order_by("-id")
         .first()
     )
 
     if last_quotation:
         try:
-            last_number = int(
-                last_quotation.quotation_number.replace(prefix, "")
-            )
+            last_number = int(last_quotation.quotation_number.replace(prefix, ""))
         except ValueError:
             last_number = 0
     else:
@@ -1026,78 +1262,155 @@ def generate_quotation_number():
 
     return f"{prefix}{last_number + 1:04d}"
 
+
+class NextQuotationNumberView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response({"quotation_number": generate_quotation_number()})
+
+
 class ConvertOpportunityToQuotationView(APIView):
     permission_classes = [IsAuthenticated]
 
     @transaction.atomic
     def post(self, request, pk):
         opportunity = (
-            Opportunity.objects
-            .prefetch_related("modules")
+            Opportunity.objects.prefetch_related("modules")
             .select_related("company", "lead")
             .filter(id=pk, is_active=True)
             .first()
         )
 
         if opportunity is None:
-            return Response({"detail": "Opportunity not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": "Opportunity not found."}, status=status.HTTP_404_NOT_FOUND
+            )
 
         modules = list(opportunity.modules.all().order_by("module_number"))
         if not modules:
-            return Response({"detail": "Cannot convert opportunity without modules."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Cannot convert opportunity without modules."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        if opportunity.quotations.filter(status__in=["DRAFT", "SENT", "APPROVED", "REVISION"]).exists():
-            return Response({"detail": "An active quotation already exists for this opportunity."}, status=status.HTTP_400_BAD_REQUEST)
+        if opportunity.quotations.filter(
+            status__in=["DRAFT", "SENT", "APPROVED", "REVISION"]
+        ).exists():
+            return Response(
+                {"detail": "An active quotation already exists for this opportunity."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         raw_items = request.data.get("items")
         if not isinstance(raw_items, list) or not raw_items:
-            return Response({"detail": "At least one module item is required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "At least one module item is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         module_map = {module.id: module for module in modules}
         submitted_by_module = {}
 
         for index, raw_item in enumerate(raw_items, start=1):
             if not isinstance(raw_item, dict):
-                return Response({"detail": f"Item {index} is invalid."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"detail": f"Item {index} is invalid."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             module_id = raw_item.get("module")
             amount_value = raw_item.get("amount")
 
             if module_id in (None, ""):
-                return Response({"detail": f"Item {index} is missing a module reference."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"detail": f"Item {index} is missing a module reference."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             try:
                 module_id = int(module_id)
             except (TypeError, ValueError):
-                return Response({"detail": f"Item {index} has an invalid module id."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"detail": f"Item {index} has an invalid module id."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             if module_id not in module_map:
-                return Response({"detail": f"Module {module_id} does not belong to this opportunity."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {
+                        "detail": f"Module {module_id} does not belong to this opportunity."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             if module_id in submitted_by_module:
-                return Response({"detail": f"Module {module_id} was submitted more than once."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"detail": f"Module {module_id} was submitted more than once."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             if amount_value in (None, ""):
-                return Response({"detail": f"Amount is required for module {module_id}."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"detail": f"Amount is required for module {module_id}."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             try:
                 amount = Decimal(str(amount_value))
             except InvalidOperation:
-                return Response({"detail": f"Amount for module {module_id} must be numeric."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"detail": f"Amount for module {module_id} must be numeric."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             if amount < 0:
-                return Response({"detail": f"Amount for module {module_id} cannot be negative."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"detail": f"Amount for module {module_id} cannot be negative."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             submitted_by_module[module_id] = amount
 
-        missing_modules = [module.id for module in modules if module.id not in submitted_by_module]
+        missing_modules = [
+            module.id for module in modules if module.id not in submitted_by_module
+        ]
         if missing_modules:
-            return Response({"detail": "All opportunity modules must be included in the request."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "All opportunity modules must be included in the request."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        company = opportunity.company
+        company_id = request.data.get("company_id")
+        if company_id not in (None, ""):
+            try:
+                company_id = int(company_id)
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "Select a valid company."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            company = Company.objects.filter(pk=company_id, is_active=True).first()
+            if company is None:
+                return Response(
+                    {"detail": "The selected company was not found."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if opportunity.company_id != company.id:
+                opportunity.company = company
+                opportunity.save(update_fields=["company", "updated_at"])
+        elif opportunity.company is None:
+            return Response(
+                {"detail": "Select a company before converting."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         quotation = Quotation.objects.create(
             quotation_number=generate_quotation_number(),
             quotation_date=timezone.now().date(),
             opportunity=opportunity,
+            company=company,
             project_name=(opportunity.project_name or "").strip(),
             status="DRAFT",
             discount=Decimal("0.00"),
@@ -1130,4 +1443,10 @@ class ConvertOpportunityToQuotationView(APIView):
         quotation.save()
 
         serializer = QuotationSerializer(quotation)
-        return Response({"message": "Opportunity converted to quotation successfully.", "quotation": serializer.data}, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "message": "Opportunity converted to quotation successfully.",
+                "quotation": serializer.data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
