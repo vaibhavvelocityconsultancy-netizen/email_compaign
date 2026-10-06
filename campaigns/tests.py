@@ -1,10 +1,12 @@
 import csv
 import io
 import tempfile
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.test.utils import override_settings
@@ -888,3 +890,75 @@ class TaskActivitiesAPITests(TestCase):
             "/api/tasks/dashboard/", {"user_id": "not-a-valid-id"}
         )
         self.assertEqual(invalid_response.status_code, 400)
+
+    def test_recurring_command_creates_due_child_once_with_parent_details(self):
+        today = date(2026, 10, 6)
+        parent = self.create_task(
+            "Call customer",
+            today - timedelta(days=1),
+            assigned_to=self.user,
+            remarks="Use updated contact details",
+            is_recurring=True,
+            repeat_frequency="DAILY",
+            repeat_interval=1,
+            repeat_end_date=today + timedelta(days=2),
+        )
+
+        with patch(
+            "campaigns.management.commands.create_recurring_tasks.timezone.localdate",
+            return_value=today,
+        ):
+            output = io.StringIO()
+            call_command("create_recurring_tasks", stdout=output)
+            call_command("create_recurring_tasks", stdout=io.StringIO())
+
+        instances = Task.objects.filter(parent_task=parent)
+        self.assertEqual(instances.count(), 1)
+        instance = instances.get()
+        self.assertEqual(instance.followup_date, today)
+        self.assertEqual(instance.status, "PENDING")
+        self.assertFalse(instance.is_recurring)
+        self.assertEqual(instance.assigned_to, self.user)
+        self.assertEqual(instance.remarks, "Use updated contact details")
+        self.assertIn("Total created: 1", output.getvalue())
+
+    def test_recurring_command_respects_repeat_end_date_and_monthly_clamping(self):
+        from campaigns.management.commands.create_recurring_tasks import Command
+
+        today = date(2026, 3, 1)
+        expired_parent = self.create_task(
+            "Expired",
+            today - timedelta(days=1),
+            is_recurring=True,
+            repeat_frequency="DAILY",
+            repeat_interval=1,
+            repeat_end_date=today - timedelta(days=1),
+        )
+        monthly_parent = self.create_task(
+            "Monthly",
+            date(2026, 1, 31),
+            is_recurring=True,
+            repeat_frequency="MONTHLY",
+            repeat_interval=1,
+        )
+        leap_year_parent = self.create_task(
+            "Leap year",
+            date(2024, 2, 29),
+            is_recurring=True,
+            repeat_frequency="YEARLY",
+            repeat_interval=1,
+        )
+
+        with patch(
+            "campaigns.management.commands.create_recurring_tasks.timezone.localdate",
+            return_value=today,
+        ):
+            call_command("create_recurring_tasks", stdout=io.StringIO())
+
+        self.assertFalse(Task.objects.filter(parent_task=expired_parent).exists())
+        monthly_instance = Task.objects.get(parent_task=monthly_parent)
+        self.assertEqual(monthly_instance.followup_date, date(2026, 2, 28))
+        self.assertEqual(
+            Command.get_next_date(leap_year_parent.followup_date, leap_year_parent),
+            date(2025, 2, 28),
+        )
