@@ -1,11 +1,13 @@
 import csv
 import io
+import tempfile
 from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from django.test.utils import override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -131,6 +133,9 @@ class FinalOfferGenerationTests(TestCase):
 
 class CpoCreationTests(TestCase):
     def setUp(self):
+        self.media_directory = tempfile.TemporaryDirectory()
+        self.media_override = override_settings(MEDIA_ROOT=self.media_directory.name)
+        self.media_override.enable()
         self.user = get_user_model().objects.create_user(
             username="cpocreator",
             email="cpo@example.com",
@@ -144,32 +149,152 @@ class CpoCreationTests(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(user=self.user)
 
-    def test_create_cpo_marks_quotation_and_is_idempotent(self):
-        url = f"/api/quotations/{self.quotation.id}/create-cpo/"
+    def tearDown(self):
+        self.media_override.disable()
+        self.media_directory.cleanup()
+
+    def test_mark_for_cpo_is_idempotent_and_does_not_create_po_details(self):
+        url = f"/api/quotations/{self.quotation.id}/mark-for-cpo/"
 
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data, {"message": "CPO created", "cpo_created": True})
+        self.assertEqual(response.data["cpo_ready"], True)
         self.quotation.refresh_from_db()
-        self.assertTrue(self.quotation.cpo_created)
+        self.assertTrue(self.quotation.cpo_ready)
+        self.assertEqual(self.quotation.customer_po_number, "")
+        self.assertFalse(self.quotation.customer_po_document)
 
         repeated_response = self.client.post(url)
 
         self.assertEqual(repeated_response.status_code, 200)
-        self.assertEqual(
-            repeated_response.data,
-            {"message": "CPO already created", "cpo_created": True},
-        )
+        self.assertIn("already marked", repeated_response.data["message"])
+        self.assertEqual(Quotation.objects.filter(cpo_ready=True).count(), 1)
 
-    def test_create_cpo_requires_authentication(self):
+    def test_mark_for_cpo_requires_authentication(self):
         client = APIClient()
 
-        response = client.post(f"/api/quotations/{self.quotation.id}/create-cpo/")
+        response = client.post(f"/api/quotations/{self.quotation.id}/mark-for-cpo/")
 
         self.assertEqual(response.status_code, 401)
         self.quotation.refresh_from_db()
-        self.assertFalse(self.quotation.cpo_created)
+        self.assertFalse(self.quotation.cpo_ready)
+
+    def test_mark_for_cpo_returns_not_found_for_missing_quotation(self):
+        response = self.client.post("/api/quotations/999999/mark-for-cpo/")
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_cpo_list_only_contains_marked_quotations(self):
+        unmarked = Quotation.objects.create(
+            quotation_number="QT-CPO-UNMARKED",
+            quotation_date="2026-10-01",
+            created_by=self.user,
+        )
+        self.client.post(f"/api/quotations/{self.quotation.id}/mark-for-cpo/")
+
+        response = self.client.get("/api/cpos/")
+
+        self.assertEqual(response.status_code, 200)
+        listed_ids = {item["id"] for item in response.data}
+        self.assertIn(self.quotation.id, listed_ids)
+        self.assertNotIn(unmarked.id, listed_ids)
+
+    def test_customer_po_upload_saves_document_and_requires_manual_number_review(self):
+        self.client.post(f"/api/quotations/{self.quotation.id}/mark-for-cpo/")
+        document = SimpleUploadedFile(
+            "customer-po.pdf",
+            b"%PDF-1.4 customer order",
+            content_type="application/pdf",
+        )
+
+        response = self.client.post(
+            f"/api/quotations/{self.quotation.id}/customer-po/",
+            {"customer_po_document": document},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data["manual_review_required"])
+        self.quotation.refresh_from_db()
+        self.assertTrue(self.quotation.customer_po_document.name)
+        self.assertEqual(self.quotation.customer_po_number, "")
+        self.assertIn("review it manually", response.data["message"])
+
+    def test_customer_po_upload_accepts_number_and_replaces_document(self):
+        self.client.post(f"/api/quotations/{self.quotation.id}/mark-for-cpo/")
+        first_response = self.client.post(
+            f"/api/quotations/{self.quotation.id}/customer-po/",
+            {
+                "customer_po_document": SimpleUploadedFile(
+                    "first.pdf", b"%PDF-1.4 first", content_type="application/pdf"
+                ),
+                "customer_po_number": "PO-100",
+            },
+            format="multipart",
+        )
+        self.assertEqual(first_response.status_code, 200, first_response.data)
+        self.quotation.refresh_from_db()
+        first_document_name = self.quotation.customer_po_document.name
+
+        response = self.client.post(
+            f"/api/quotations/{self.quotation.id}/customer-po/",
+            {
+                "customer_po_document": SimpleUploadedFile(
+                    "replacement.pdf",
+                    b"%PDF-1.4 replacement",
+                    content_type="application/pdf",
+                ),
+                "customer_po_number": "PO-200",
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(response.data["manual_review_required"])
+        self.quotation.refresh_from_db()
+        self.assertEqual(self.quotation.customer_po_number, "PO-200")
+        self.assertNotEqual(self.quotation.customer_po_document.name, first_document_name)
+
+    def test_customer_po_upload_rejects_missing_or_invalid_document(self):
+        self.client.post(f"/api/quotations/{self.quotation.id}/mark-for-cpo/")
+
+        missing_response = self.client.post(
+            f"/api/quotations/{self.quotation.id}/customer-po/",
+            {},
+            format="multipart",
+        )
+        invalid_response = self.client.post(
+            f"/api/quotations/{self.quotation.id}/customer-po/",
+            {
+                "customer_po_document": SimpleUploadedFile(
+                    "not-a-pdf.pdf",
+                    b"not a pdf",
+                    content_type="application/pdf",
+                )
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(missing_response.status_code, 400)
+        self.assertEqual(invalid_response.status_code, 400)
+        self.quotation.refresh_from_db()
+        self.assertFalse(self.quotation.customer_po_document)
+
+    def test_customer_po_upload_rejects_unmarked_quotation(self):
+        response = self.client.post(
+            f"/api/quotations/{self.quotation.id}/customer-po/",
+            {
+                "customer_po_document": SimpleUploadedFile(
+                    "customer-po.pdf", b"%PDF-1.4 content", content_type="application/pdf"
+                )
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.quotation.refresh_from_db()
+        self.assertFalse(self.quotation.customer_po_document)
 
 
 class LeadSerializerTests(TestCase):

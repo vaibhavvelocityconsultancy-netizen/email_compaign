@@ -674,6 +674,17 @@ class Quotation(models.Model):
         default=False
     )
 
+    cpo_date = models.DateField(
+        null=True,
+        blank=True,
+    )
+
+    cpo_document = models.FileField(
+        upload_to="quotations/customer_pos/",
+        null=True,
+        blank=True,
+    )
+
     fo_date = models.DateField(
         null=True,
         blank=True
@@ -721,6 +732,61 @@ class Quotation(models.Model):
 
     def __str__(self):
         return self.quotation_number
+
+
+class SalesOrder(models.Model):
+    STATUS_CHOICES = [
+        ("DRAFT", "Draft"),
+        ("CONFIRMED", "Confirmed"),
+        ("IN_PROGRESS", "In Progress"),
+        ("COMPLETED", "Completed"),
+        ("CANCELLED", "Cancelled"),
+    ]
+
+    so_number = models.CharField(max_length=50, unique=True)
+    so_date = models.DateField()
+    quotation = models.ForeignKey(
+        Quotation,
+        on_delete=models.PROTECT,
+        related_name="sales_orders",
+    )
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.PROTECT,
+        related_name="sales_orders",
+    )
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    discount_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    taxable_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    tax_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    cgst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    sgst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    igst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    packing_charges = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    tax_type = models.CharField(max_length=30, blank=True)
+    payment_terms = models.TextField(blank=True)
+    delivery_terms = models.TextField(blank=True)
+    remarks = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="DRAFT")
+    so_pdf = models.FileField(upload_to="sales_orders/", blank=True, null=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="created_sales_orders",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.so_number
+
+
 
 
 class QuotationItem(models.Model):

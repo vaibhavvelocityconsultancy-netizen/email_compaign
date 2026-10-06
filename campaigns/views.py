@@ -53,6 +53,7 @@ from campaigns.serializers import (
     OpportunityCreateSerializer,
     OpportunityModuleSerializer,
     QuotationSerializer,
+    SalesOrderSerializer,
     FinalOfferUpdateSerializer,
     TaskSerializer,
 )
@@ -70,6 +71,7 @@ from .models import (
     OpportunityModule,
     Quotation,
     QuotationItem,
+    SalesOrder,
     Sequence,
     SequenceStep,
     State,
@@ -542,8 +544,19 @@ class OpportunityModuleDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class QuotationListCreateView(generics.ListCreateAPIView):
     queryset = (
-        Quotation.objects.select_related("opportunity", "created_by")
-        .prefetch_related("items__module")
+        Quotation.objects.select_related(
+            "company",
+            "opportunity",
+            "opportunity__company",
+            "opportunity__lead__company",
+            "created_by",
+        )
+        .prefetch_related(
+            "items__module",
+            "company__contacts",
+            "opportunity__company__contacts",
+            "opportunity__lead__company__contacts",
+        )
         .all()
     )
     serializer_class = QuotationSerializer
@@ -559,6 +572,9 @@ class QuotationListCreateView(generics.ListCreateAPIView):
             queryset = queryset.filter(status=status_filter)
         if opportunity_id:
             queryset = queryset.filter(opportunity_id=opportunity_id)
+        cpo_created = self.request.query_params.get("cpo_created")
+        if cpo_created is not None:
+            queryset = queryset.filter(cpo_created=cpo_created.lower() == "true")
         if search:
             queryset = queryset.filter(
                 Q(quotation_number__icontains=search)
@@ -569,34 +585,23 @@ class QuotationListCreateView(generics.ListCreateAPIView):
 
 class QuotationDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = (
-        Quotation.objects.select_related("opportunity", "created_by")
-        .prefetch_related("items__module")
+        Quotation.objects.select_related(
+            "company",
+            "opportunity",
+            "opportunity__company",
+            "opportunity__lead__company",
+            "created_by",
+        )
+        .prefetch_related(
+            "items__module",
+            "company__contacts",
+            "opportunity__company__contacts",
+            "opportunity__lead__company__contacts",
+        )
         .all()
     )
     serializer_class = QuotationSerializer
     permission_classes = [IsAuthenticated]
-
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-@transaction.atomic
-def create_cpo(request, quotation_id):
-    quotation = get_object_or_404(
-        Quotation.objects.select_for_update(),
-        pk=quotation_id,
-    )
-    already_created = quotation.cpo_created
-    if not already_created:
-        quotation.cpo_created = True
-        quotation.save(update_fields=["cpo_created", "updated_at"])
-
-    return Response(
-        {
-            "message": "CPO already created" if already_created else "CPO created",
-            "cpo_created": quotation.cpo_created,
-        }
-    )
-
 
 def _generate_final_offer_pdf_bytes(quotation):
     company = quotation.company or (
@@ -814,6 +819,233 @@ class UpdateFinalOfferView(APIView):
             QuotationSerializer(quotation, context={"request": request}).data,
             status=status.HTTP_200_OK,
         )
+
+
+
+# create so from quotation
+
+def _sales_order_pdf(sales_order):
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    y = height - 48
+
+    def write_line(text, font="Helvetica", size=10, gap=16):
+        nonlocal y
+        if y < 55:
+            pdf.showPage()
+            y = height - 48
+        pdf.setFont(font, size)
+        pdf.drawString(48, y, str(text)[:110])
+        y -= gap
+
+    write_line("SALES ORDER", "Helvetica-Bold", 18, 24)
+    write_line(f"Sales Order: {sales_order.so_number}", "Helvetica-Bold")
+    write_line(f"Date: {sales_order.so_date}")
+    write_line(f"Quotation: {sales_order.quotation.quotation_number}")
+    write_line(f"Company: {sales_order.company.name}")
+    for value in (
+        sales_order.company.address,
+        ", ".join(filter(None, [
+            sales_order.company.city.name if sales_order.company.city else "",
+            sales_order.company.state.name if sales_order.company.state else "",
+            sales_order.company.pincode,
+        ])),
+    ):
+        if value:
+            for line in wrap(value, 90):
+                write_line(line)
+    write_line("Items", "Helvetica-Bold", 12, 20)
+    for index, item in enumerate(sales_order.quotation.items.all(), start=1):
+        write_line(f"{index}. {item.module_name or item.description} — {item.amount}")
+        if item.requirements:
+            for line in wrap(item.requirements, 90):
+                write_line(line)
+    write_line(f"Total: {sales_order.total_amount}", "Helvetica-Bold", 12)
+    if sales_order.delivery_terms:
+        write_line("Delivery terms", "Helvetica-Bold", 11)
+        for line in wrap(sales_order.delivery_terms, 90):
+            write_line(line)
+    if sales_order.payment_terms:
+        write_line("Payment terms", "Helvetica-Bold", 11)
+        for line in wrap(sales_order.payment_terms, 90):
+            write_line(line)
+    if sales_order.remarks:
+        write_line("Remarks", "Helvetica-Bold", 11)
+        for line in wrap(sales_order.remarks, 90):
+            write_line(line)
+    pdf.save()
+    return buffer.getvalue()
+
+
+def _refresh_sales_order_pdf(sales_order):
+    previous_name = sales_order.so_pdf.name if sales_order.so_pdf else None
+    sales_order.so_pdf.save(
+        f"{sales_order.so_number}.pdf",
+        ContentFile(_sales_order_pdf(sales_order)),
+        save=False,
+    )
+    sales_order.save(update_fields=["so_pdf", "updated_at"])
+    if previous_name and previous_name != sales_order.so_pdf.name:
+        sales_order.so_pdf.storage.delete(previous_name)
+
+
+# @api_view(['POST'])
+# @permission_classes([IsAuthenticated])
+# def create_sales_order_from_quotation(request, quotation_id):
+#     try:
+#         quotation = DiePunchQuotation.objects.get(id=quotation_id)
+#     except DiePunchQuotation.DoesNotExist:
+#         return Response({'detail': 'Quotation not found'}, status=status.HTTP_404_NOT_FOUND)
+#     company = quotation.company
+#     if not company:
+#         return Response({'detail': 'Quotation has no linked company'}, status=status.HTTP_400_BAD_REQUEST)
+#     if quotation.sales_orders.exists():
+#         return Response({'detail': 'Sales order already exists'}, status=status.HTTP_400_BAD_REQUEST)
+#     current_year = timezone.now().year
+#     nums = [int(s.so_number.split('-')[-1]) for s in SalesOrder.objects.filter(so_number__startswith=f'SO-{current_year}') if s.so_number.split('-')[-1].isdigit()]
+#     so_number = f'SO-{current_year}-{(max(nums)+1 if nums else 1):03d}'
+#     discount_pct = Decimal(str(request.data.get('discount_percentage', 0)))
+#     discount_amt = (quotation.subtotal * discount_pct / 100).quantize(Decimal('0.01'))
+#     packing = Decimal(str(request.data.get('packing_charges', 0)))
+#     taxable = quotation.subtotal - discount_amt + packing
+#     tax_type = quotation.tax_type or 'INTRA_STATE'
+#     cgst = sgst = igst = Decimal('0')
+#     if tax_type == 'INTRA_STATE': cgst = sgst = (taxable * Decimal('0.09')).quantize(Decimal('0.01'))
+#     elif tax_type == 'INTER_STATE': igst = (taxable * Decimal('0.18')).quantize(Decimal('0.01'))
+#     elif tax_type == 'INTER_STATE_LUT': igst = (taxable * Decimal('0.001')).quantize(Decimal('0.01'))
+#     tax_amount = cgst + sgst + igst
+#     so = SalesOrder.objects.create(
+#         so_number=so_number, so_date=timezone.now().date(), quotation=quotation, company=company,
+#         subtotal=quotation.subtotal, discount_percentage=discount_pct, discount_amount=discount_amt,
+#         tax_percentage=quotation.tax_percentage, tax_amount=tax_amount, total_amount=taxable+tax_amount,
+#         tax_type=tax_type, cgst_amount=cgst, sgst_amount=sgst, igst_amount=igst,
+#         packing_charges=packing, taxable_amount=taxable,
+#         payment_terms=request.data.get('payment_terms', ''),
+#         delivery_terms=request.data.get('delivery_terms', ''),
+#         remarks=request.data.get('remarks', ''), status='DRAFT', created_by=request.user,
+#     )
+#     quotation.status = 'CONVERTED'
+#     quotation.save(update_fields=['status'])
+#     return Response({'so_number': so.so_number, 'id': so.id}, status=status.HTTP_201_CREATED)
+
+
+
+#     if not has_permission(request.user, MODULE, 'view'):
+#         return Response({'detail': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+#     qs = SalesOrder.objects.all().select_related('company', 'quotation', 'created_by')
+#     return Response(SalesOrderSerializer(qs, many=True).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@transaction.atomic
+def create_sales_order_from_quotation(request, quotation_id):
+    quotation = get_object_or_404(
+        Quotation.objects.select_for_update().select_related(
+            "company", "opportunity__company", "opportunity__lead__company"
+        ),
+        pk=quotation_id,
+    )
+    if not quotation.cpo_created:
+        return Response(
+            {"detail": "Mark the quotation for CPO processing before creating a sales order."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if quotation.sales_orders.exists():
+        return Response(
+            {"detail": "Sales order already exists for this quotation"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    company = quotation.company
+    if company is None and quotation.opportunity:
+        company = quotation.opportunity.company
+        if company is None:
+            try:
+                company = quotation.opportunity.lead.company
+            except (Lead.DoesNotExist, AttributeError):
+                company = None
+    if company is None:
+        return Response(
+            {"detail": "A company must be linked to the quotation before creating a sales order."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    current_year = timezone.localdate().year
+    last_so = (
+        SalesOrder.objects.filter(so_number__startswith=f"SO-{current_year}-")
+        .order_by("-so_number")
+        .first()
+    )
+    last_number = 0
+    if last_so:
+        try:
+            last_number = int(last_so.so_number.rsplit("-", 1)[-1])
+        except ValueError:
+            last_number = 0
+    so_number = f"SO-{current_year}-{last_number + 1:03d}"
+
+    sales_order = SalesOrder.objects.create(
+        so_number=so_number,
+        so_date=timezone.localdate(),
+        quotation=quotation,
+        company=company,
+        subtotal=quotation.subtotal,
+        discount_amount=quotation.discount,
+        taxable_amount=quotation.taxable_amount,
+        tax_percentage=quotation.tax_percentage,
+        tax_amount=quotation.tax_amount,
+        total_amount=quotation.total_amount,
+        tax_type=quotation.tax_type,
+        cgst_amount=quotation.cgst_amount,
+        sgst_amount=quotation.sgst_amount,
+        igst_amount=quotation.igst_amount,
+        packing_charges=quotation.packing_charges,
+        payment_terms=request.data.get("payment_terms", ""),
+        delivery_terms=request.data.get("delivery_terms", ""),
+        remarks=request.data.get("remarks", ""),
+        status="DRAFT",
+        created_by=request.user,
+    )
+    _refresh_sales_order_pdf(sales_order)
+    quotation.status = "CONVERTED"
+    quotation.save(update_fields=["status", "updated_at"])
+
+    return Response(
+        {"so_number": sales_order.so_number, "id": sales_order.id},
+        status=status.HTTP_201_CREATED,
+    )
+
+
+
+class SalesOrderListView(generics.ListAPIView):
+    serializer_class = SalesOrderSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = (
+        SalesOrder.objects.select_related(
+            "company", "company__city", "company__state", "company__country",
+            "quotation", "created_by",
+        )
+        .prefetch_related("quotation__items__module", "company__contacts")
+        .all()
+    )
+
+
+class SalesOrderDetailView(generics.RetrieveUpdateAPIView):
+    serializer_class = SalesOrderSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = (
+        SalesOrder.objects.select_related(
+            "company", "company__city", "company__state", "company__country",
+            "quotation", "created_by",
+        )
+        .prefetch_related("quotation__items__module", "company__contacts")
+    )
+
+    def perform_update(self, serializer):
+        sales_order = serializer.save()
+        _refresh_sales_order_pdf(sales_order)
 
 
 class EmailLogListView(APIView):
