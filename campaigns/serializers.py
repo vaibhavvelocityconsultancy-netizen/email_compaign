@@ -15,6 +15,7 @@ from .models import (
     OpportunityModule,
     Quotation,
     QuotationItem,
+    SalesOrder,
     Sequence,
     SequenceStep,
     State,
@@ -774,7 +775,7 @@ class OpportunityCreateSerializer(serializers.ModelSerializer):
 
 
 class QuotationItemSerializer(serializers.ModelSerializer):
-    module_name = serializers.CharField(source="module.module_name", read_only=True)
+    module_name = serializers.CharField(read_only=True)
 
     class Meta:
         model = QuotationItem
@@ -853,6 +854,9 @@ class FinalOfferUpdateSerializer(serializers.Serializer):
 class QuotationSerializer(serializers.ModelSerializer):
     items = QuotationItemSerializer(many=True, required=False)
     company_name = serializers.SerializerMethodField()
+    company_address = serializers.SerializerMethodField()
+    company_pincode = serializers.SerializerMethodField()
+    company_contacts = serializers.SerializerMethodField()
     company_id = serializers.SerializerMethodField()
     selected_company_id = serializers.PrimaryKeyRelatedField(
         queryset=Company.objects.filter(is_active=True),
@@ -871,6 +875,13 @@ class QuotationSerializer(serializers.ModelSerializer):
         input_formats=["%m-%d-%Y", "%Y-%m-%d"],
     )
     fo_date = serializers.DateField(format="%Y-%m-%d", required=False, allow_null=True, read_only=True)
+    cpo_date = serializers.DateField(
+        format="%Y-%m-%d",
+        input_formats=["%Y-%m-%d", "%m-%d-%Y"],
+        required=False,
+        allow_null=True,
+    )
+    cpo_document = serializers.FileField(required=False, allow_null=True)
 
     class Meta:
         model = Quotation
@@ -880,6 +891,9 @@ class QuotationSerializer(serializers.ModelSerializer):
             "quotation_date",
             "opportunity",
             "company_name",
+            "company_address",
+            "company_pincode",
+            "company_contacts",
             "company_id",
             "selected_company_id",
             "company_city",
@@ -905,6 +919,8 @@ class QuotationSerializer(serializers.ModelSerializer):
             "pdf_ref_number",
             "final_offer_generated",
             "cpo_created",
+            "cpo_date",
+            "cpo_document",
             "fo_date",
             "final_offer_pdf",
             "fo_as_ref",
@@ -920,7 +936,6 @@ class QuotationSerializer(serializers.ModelSerializer):
             "company_id",
             "status_display",
             "tax_type_display",
-            "cpo_created",
             "created_by",
             "created_by_name",
             "created_at",
@@ -945,6 +960,44 @@ class QuotationSerializer(serializers.ModelSerializer):
         except Lead.DoesNotExist:
             lead = None
         return lead.company.name if lead and lead.company else ""
+
+    def get_company_address(self, obj):
+        company = self._get_related_company(obj)
+        return company.address if company else ""
+
+    def get_company_pincode(self, obj):
+        company = self._get_related_company(obj)
+        return company.pincode if company else ""
+
+    def get_company_contacts(self, obj):
+        company = self._get_related_company(obj)
+        if not company:
+            return []
+        return [
+            {
+                "name": contact.name,
+                "designation": contact.designation,
+                "phone": contact.phone,
+                "email": contact.email,
+                "is_primary": contact.is_primary,
+            }
+            for contact in company.contacts.all()
+            if contact.is_active
+        ]
+
+    @staticmethod
+    def _get_related_company(obj):
+        if obj.company_id:
+            return obj.company
+        opportunity = obj.opportunity
+        if not opportunity:
+            return None
+        if opportunity.company_id:
+            return opportunity.company
+        try:
+            return opportunity.lead.company
+        except (Lead.DoesNotExist, AttributeError):
+            return None
 
     def get_company_id(self, obj):
         if obj.company_id:
@@ -990,6 +1043,24 @@ class QuotationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"tax_percentage": "Tax percentage cannot be negative."})
         return attrs
 
+    def validate_cpo_document(self, uploaded_document):
+        if uploaded_document is None:
+            return uploaded_document
+        from django.conf import settings
+
+        maximum_size = getattr(settings, "CPO_MAX_UPLOAD_SIZE", 10 * 1024 * 1024)
+        if uploaded_document.size > maximum_size:
+            raise serializers.ValidationError(
+                f"PDF must not exceed {maximum_size // (1024 * 1024)} MB."
+            )
+        if not uploaded_document.name.lower().endswith(".pdf"):
+            raise serializers.ValidationError("Only PDF documents are allowed.")
+        header = uploaded_document.read(5)
+        uploaded_document.seek(0)
+        if header != b"%PDF-":
+            raise serializers.ValidationError("The uploaded file is not a valid PDF.")
+        return uploaded_document
+
     @transaction.atomic
     def create(self, validated_data):
         items_data = validated_data.pop("items", [])
@@ -1020,6 +1091,119 @@ class QuotationSerializer(serializers.ModelSerializer):
         return quotation
       
 
+class SalesOrderSerializer(serializers.ModelSerializer):
+    company_name = serializers.CharField(source="company.name", read_only=True)
+    company_address = serializers.CharField(source="company.address", read_only=True)
+    company_city = serializers.IntegerField(source="company.city_id", read_only=True, allow_null=True)
+    company_city_name = serializers.CharField(source="company.city.name", read_only=True, allow_null=True)
+    company_state = serializers.IntegerField(source="company.state_id", read_only=True, allow_null=True)
+    company_state_name = serializers.CharField(source="company.state.name", read_only=True, allow_null=True)
+    company_country = serializers.IntegerField(source="company.country_id", read_only=True, allow_null=True)
+    company_country_name = serializers.CharField(source="company.country.name", read_only=True, allow_null=True)
+    company_pincode = serializers.CharField(source="company.pincode", read_only=True)
+    company_gst_number = serializers.CharField(source="company.gst_number", read_only=True)
+    quotation_number = serializers.CharField(source="quotation.quotation_number", read_only=True)
+    project_name = serializers.CharField(source="quotation.project_name", read_only=True)
+    items = QuotationItemSerializer(source="quotation.items", many=True, read_only=True)
+    company_contacts = serializers.SerializerMethodField()
+    quotation_pdf = serializers.FileField(source="quotation.quotation_pdf", read_only=True, use_url=True)
+    final_offer_pdf = serializers.FileField(source="quotation.final_offer_pdf", read_only=True, use_url=True)
+    cpo_document = serializers.FileField(source="quotation.cpo_document", read_only=True, use_url=True)
+    created_by_name = serializers.SerializerMethodField()
+
+    def get_company_contacts(self, obj):
+        return CompanyContactSerializer(
+            obj.company.contacts.filter(is_active=True), many=True
+        ).data
+
+    def get_created_by_name(self, obj):
+        if not obj.created_by:
+            return ""
+        return obj.created_by.get_full_name() or obj.created_by.get_username()
+
+    class Meta:
+        model = SalesOrder
+        fields = [
+            "id",
+            "so_number",
+            "so_date",
+            "quotation",
+            "quotation_number",
+            "company",
+            "company_name",
+            "company_address",
+            "company_city",
+            "company_city_name",
+            "company_state",
+            "company_state_name",
+            "company_country",
+            "company_country_name",
+            "company_pincode",
+            "company_gst_number",
+            "project_name",
+            "subtotal",
+            "discount_percentage",
+            "discount_amount",
+            "taxable_amount",
+            "tax_percentage",
+            "tax_amount",
+            "cgst_amount",
+            "sgst_amount",
+            "igst_amount",
+            "packing_charges",
+            "total_amount",
+            "tax_type",
+            "payment_terms",
+            "delivery_terms",
+            "remarks",
+            "status",
+            "created_by",
+            "created_by_name",
+            "created_at",
+            "items",
+            "company_contacts",
+            "quotation_pdf",
+            "final_offer_pdf",
+            "cpo_document",
+            "so_pdf",
+        ]
+        read_only_fields = [
+            "quotation",
+            "company",
+            "subtotal",
+            "discount_percentage",
+            "discount_amount",
+            "taxable_amount",
+            "tax_percentage",
+            "tax_amount",
+            "cgst_amount",
+            "sgst_amount",
+            "igst_amount",
+            "packing_charges",
+            "total_amount",
+            "tax_type",
+            "created_by",
+            "created_by_name",
+            "created_at",
+            "items",
+            "company_name",
+            "company_address",
+            "company_city",
+            "company_city_name",
+            "company_state",
+            "company_state_name",
+            "company_country",
+            "company_country_name",
+            "company_pincode",
+            "company_gst_number",
+            "quotation_number",
+            "project_name",
+            "company_contacts",
+            "quotation_pdf",
+            "final_offer_pdf",
+            "cpo_document",
+            "so_pdf",
+        ]
 
 
 # Task Serializers
@@ -1095,7 +1279,3 @@ class TaskCreateSerializer(serializers.ModelSerializer):
             'remarks', 'attachments', 'company', 'company_name', 'task_regarding',
             'is_recurring', 'repeat_frequency', 'repeat_interval', 'repeat_end_date'
         ]
-
-
-
-
