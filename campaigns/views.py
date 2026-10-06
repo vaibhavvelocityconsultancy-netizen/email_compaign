@@ -3,6 +3,7 @@ from io import BytesIO
 from textwrap import wrap
 
 from django.core.files.base import ContentFile
+from django.core.exceptions import ValidationError
 from django.forms import models
 from django.shortcuts import get_object_or_404, render
 from django.db.models import Count, Q
@@ -19,9 +20,12 @@ import csv
 import hashlib
 import hmac
 import re
-from datetime import datetime, timedelta, timezone as dt_timezone
+from calendar import monthrange
+from datetime import date, datetime, timedelta, timezone as dt_timezone
 
 from django.contrib.auth import get_user_model
+from django.db.models import Sum
+from django.db.models.functions import TruncMonth
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -32,6 +36,7 @@ from django.conf import settings
 from django.db import transaction
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.views.decorators.csrf import csrf_exempt
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
@@ -246,20 +251,27 @@ class TaskDetailView(APIView):
             context={"request": request},
         )
         serializer.is_valid(raise_exception=True)
-        task = serializer.save()
-        history = list(task.followup_history or [])
-        history.append(
-            {
-                "id": len(history) + 1,
-                "followup_date": str(task.followup_date or ""),
-                "remark": task.remarks,
-                "updated_by": request.user.get_full_name()
-                or request.user.get_username(),
-                "timestamp": timezone.now().strftime("%d-%m-%Y %H:%M:%S"),
-            }
+        previous_followup_date = task.followup_date
+        previous_remarks = task.remarks
+        followup_date_changed = (
+            "followup_date" in serializer.validated_data
+            and serializer.validated_data["followup_date"] != previous_followup_date
         )
-        task.followup_history = history
-        task.save(update_fields=["followup_history", "updated_at"])
+        history = list(task.followup_history or [])
+        task = serializer.save()
+        if followup_date_changed:
+            history.append(
+                {
+                    "id": len(history) + 1,
+                    "followup_date": str(previous_followup_date or ""),
+                    "remark": previous_remarks,
+                    "updated_by": request.user.get_full_name()
+                    or request.user.get_username(),
+                    "timestamp": timezone.now().strftime("%d-%m-%Y %H:%M:%S"),
+                }
+            )
+            task.followup_history = history
+            task.save(update_fields=["followup_history", "updated_at"])
         _add_task_attachments(task, request)
         return Response(TaskSerializer(task, context={"request": request}).data)
 
@@ -310,6 +322,69 @@ class TaskOptionsView(APIView):
                 ],
             }
         )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_task_dashboard(request):
+    today = timezone.localdate()
+    base_queryset = Task.objects.filter(is_deleted=False)
+    user = request.user
+    role_code = getattr(getattr(user, "role", None), "code", None)
+    can_view_all = (
+        user.is_superuser or user.is_staff or role_code in {"superadmin", "manager"}
+    )
+    if not can_view_all:
+        base_queryset = base_queryset.filter(Q(assigned_to=user) | Q(created_by=user))
+
+    selected_user_id = request.query_params.get("user_id")
+    if selected_user_id:
+        try:
+            selected_user_id = Task._meta.get_field("assigned_to").target_field.to_python(
+                selected_user_id
+            )
+        except (TypeError, ValueError, ValidationError):
+            return Response(
+                {"error": "Invalid user_id"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        base_queryset = base_queryset.filter(assigned_to_id=selected_user_id)
+
+    return Response(
+        {
+            "total": base_queryset.count(),
+            "by_status": list(
+                base_queryset.values("status")
+                .annotate(count=Count("id"))
+                .order_by("status")
+            ),
+            "by_priority": list(
+                base_queryset.values("priority")
+                .annotate(count=Count("id"))
+                .order_by("priority")
+            ),
+            "by_module": list(
+                base_queryset.values("module")
+                .annotate(count=Count("id"))
+                .order_by("module")
+            ),
+            "in_progress": base_queryset.filter(status="IN_PROGRESS").count(),
+            "pending": base_queryset.filter(status="PENDING").count(),
+            "recurring": base_queryset.filter(is_recurring=True).count(),
+            "overdue": base_queryset.filter(
+                followup_date__lt=today, status__in=["PENDING", "IN_PROGRESS"]
+            ).count(),
+            "due_today": base_queryset.filter(followup_date=today).count(),
+            "upcoming": base_queryset.filter(
+                followup_date__gt=today, status__in=["PENDING", "IN_PROGRESS"]
+            ).count(),
+            "miscellaneous": base_queryset.filter(
+                task_regarding__iexact="MISCELLANEOUS"
+            )
+            .exclude(status="COMPLETED")
+            .count(),
+            "completed": base_queryset.filter(status="COMPLETED").count(),
+        }
+    )
 
 
 @api_view(["GET"])
@@ -890,51 +965,6 @@ def _refresh_sales_order_pdf(sales_order):
         sales_order.so_pdf.storage.delete(previous_name)
 
 
-# @api_view(['POST'])
-# @permission_classes([IsAuthenticated])
-# def create_sales_order_from_quotation(request, quotation_id):
-#     try:
-#         quotation = DiePunchQuotation.objects.get(id=quotation_id)
-#     except DiePunchQuotation.DoesNotExist:
-#         return Response({'detail': 'Quotation not found'}, status=status.HTTP_404_NOT_FOUND)
-#     company = quotation.company
-#     if not company:
-#         return Response({'detail': 'Quotation has no linked company'}, status=status.HTTP_400_BAD_REQUEST)
-#     if quotation.sales_orders.exists():
-#         return Response({'detail': 'Sales order already exists'}, status=status.HTTP_400_BAD_REQUEST)
-#     current_year = timezone.now().year
-#     nums = [int(s.so_number.split('-')[-1]) for s in SalesOrder.objects.filter(so_number__startswith=f'SO-{current_year}') if s.so_number.split('-')[-1].isdigit()]
-#     so_number = f'SO-{current_year}-{(max(nums)+1 if nums else 1):03d}'
-#     discount_pct = Decimal(str(request.data.get('discount_percentage', 0)))
-#     discount_amt = (quotation.subtotal * discount_pct / 100).quantize(Decimal('0.01'))
-#     packing = Decimal(str(request.data.get('packing_charges', 0)))
-#     taxable = quotation.subtotal - discount_amt + packing
-#     tax_type = quotation.tax_type or 'INTRA_STATE'
-#     cgst = sgst = igst = Decimal('0')
-#     if tax_type == 'INTRA_STATE': cgst = sgst = (taxable * Decimal('0.09')).quantize(Decimal('0.01'))
-#     elif tax_type == 'INTER_STATE': igst = (taxable * Decimal('0.18')).quantize(Decimal('0.01'))
-#     elif tax_type == 'INTER_STATE_LUT': igst = (taxable * Decimal('0.001')).quantize(Decimal('0.01'))
-#     tax_amount = cgst + sgst + igst
-#     so = SalesOrder.objects.create(
-#         so_number=so_number, so_date=timezone.now().date(), quotation=quotation, company=company,
-#         subtotal=quotation.subtotal, discount_percentage=discount_pct, discount_amount=discount_amt,
-#         tax_percentage=quotation.tax_percentage, tax_amount=tax_amount, total_amount=taxable+tax_amount,
-#         tax_type=tax_type, cgst_amount=cgst, sgst_amount=sgst, igst_amount=igst,
-#         packing_charges=packing, taxable_amount=taxable,
-#         payment_terms=request.data.get('payment_terms', ''),
-#         delivery_terms=request.data.get('delivery_terms', ''),
-#         remarks=request.data.get('remarks', ''), status='DRAFT', created_by=request.user,
-#     )
-#     quotation.status = 'CONVERTED'
-#     quotation.save(update_fields=['status'])
-#     return Response({'so_number': so.so_number, 'id': so.id}, status=status.HTTP_201_CREATED)
-
-
-
-#     if not has_permission(request.user, MODULE, 'view'):
-#         return Response({'detail': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
-#     qs = SalesOrder.objects.all().select_related('company', 'quotation', 'created_by')
-#     return Response(SalesOrderSerializer(qs, many=True).data)
 
 
 @api_view(["POST"])
@@ -1046,6 +1076,179 @@ class SalesOrderDetailView(generics.RetrieveUpdateAPIView):
     def perform_update(self, serializer):
         sales_order = serializer.save()
         _refresh_sales_order_pdf(sales_order)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_order_dashboard(request):
+    period = request.query_params.get("period", "yearly")
+    try:
+        year = int(request.query_params.get("year", timezone.localdate().year))
+        if not 1 <= year <= 9998:
+            raise ValueError
+    except (TypeError, ValueError):
+        return Response(
+            {"detail": "year must be a valid year between 1 and 9998."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if period == "custom":
+        start_date = parse_date(request.query_params.get("start_date", ""))
+        end_date = parse_date(request.query_params.get("end_date", ""))
+        if not start_date or not end_date:
+            return Response(
+                {"detail": "Custom periods require valid start_date and end_date values."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if start_date > end_date:
+            return Response(
+                {"detail": "start_date must be on or before end_date."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        period_label = f"{start_date} to {end_date}"
+    elif period == "quarterly":
+        try:
+            quarter = int(request.query_params.get("quarter", 1))
+            if quarter not in range(1, 5):
+                raise ValueError
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "quarter must be an integer from 1 to 4."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        start_month = (quarter - 1) * 3 + 1
+        end_month = start_month + 2
+        start_date = date(year, start_month, 1)
+        end_date = date(year, end_month, monthrange(year, end_month)[1])
+        period_label = f"Q{quarter} {year}"
+    elif period == "half_yearly":
+        try:
+            half = int(request.query_params.get("half", 1))
+            if half not in (1, 2):
+                raise ValueError
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "half must be either 1 or 2."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        start_month, end_month = (1, 6) if half == 1 else (7, 12)
+        start_date = date(year, start_month, 1)
+        end_date = date(year, end_month, monthrange(year, end_month)[1])
+        period_label = f"H{half} {year}"
+    elif period == "yearly":
+        start_date = date(year, 1, 1)
+        end_date = date(year, 12, 31)
+        period_label = f"Annual {year}"
+    else:
+        return Response(
+            {"detail": "period must be yearly, quarterly, half_yearly, or custom."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    quotation_queryset = Quotation.objects.filter(
+        quotation_date__gte=start_date,
+        quotation_date__lte=end_date,
+    )
+    final_offer_queryset = quotation_queryset.filter(final_offer_generated=True)
+    cpo_queryset = quotation_queryset.filter(cpo_date__isnull=False)
+    sales_order_queryset = SalesOrder.objects.filter(
+        so_date__gte=start_date,
+        so_date__lte=end_date,
+    )
+
+    def total_amount(queryset):
+        return float(queryset.aggregate(total=Sum("total_amount"))["total"] or 0)
+
+    def conversion_rate(converted, total):
+        return round(converted * 100 / total, 2) if total else 0
+
+    def monthly_aggregates(queryset, date_field):
+        aggregates = {}
+        for row in (
+            queryset.annotate(month=TruncMonth(date_field))
+            .values("month")
+            .annotate(count=Count("id"), amount=Sum("total_amount"))
+            .order_by("month")
+        ):
+            month = row["month"]
+            month_key = month.date() if isinstance(month, datetime) else month
+            aggregates[month_key] = {
+                "count": row["count"],
+                "amount": float(row["amount"] or 0),
+            }
+        return aggregates
+
+    quotations_by_month = monthly_aggregates(quotation_queryset, "quotation_date")
+    final_offers_by_month = monthly_aggregates(final_offer_queryset, "quotation_date")
+    cpos_by_month = monthly_aggregates(cpo_queryset, "quotation_date")
+    sales_orders_by_month = monthly_aggregates(sales_order_queryset, "so_date")
+
+    monthly_history = []
+    month_start = date(start_date.year, start_date.month, 1)
+    while month_start <= end_date:
+        month_end = date(
+            month_start.year,
+            month_start.month,
+            monthrange(month_start.year, month_start.month)[1],
+        )
+        bucket_date = month_start
+        quotation_month = quotations_by_month.get(bucket_date, {})
+        final_offer_month = final_offers_by_month.get(bucket_date, {})
+        cpo_month = cpos_by_month.get(bucket_date, {})
+        sales_order_month = sales_orders_by_month.get(bucket_date, {})
+        monthly_history.append(
+            {
+                "month": month_start.strftime("%b %Y"),
+                "quotations": quotation_month.get("count", 0),
+                "quotations_amount": quotation_month.get("amount", 0),
+                "fo": final_offer_month.get("count", 0),
+                "fo_amount": final_offer_month.get("amount", 0),
+                "cpo": cpo_month.get("count", 0),
+                "cpo_amount": cpo_month.get("amount", 0),
+                "so": sales_order_month.get("count", 0),
+                "so_amount": sales_order_month.get("amount", 0),
+            }
+        )
+        if month_end >= end_date:
+            break
+        next_month = month_start.month + 1
+        month_start = date(
+            month_start.year + (1 if next_month > 12 else 0),
+            1 if next_month > 12 else next_month,
+            1,
+        )
+
+    quotation_count = quotation_queryset.count()
+    final_offer_count = final_offer_queryset.count()
+    cpo_count = cpo_queryset.count()
+    sales_order_count = sales_order_queryset.count()
+    sales_orders_from_cpo = sales_order_queryset.filter(
+        quotation__cpo_date__isnull=False
+    ).count()
+
+    return Response(
+        {
+            "period": period_label,
+            "start_date": str(start_date),
+            "end_date": str(end_date),
+            "summary": {
+                "total_quotations": quotation_count,
+                "quotations_amount": total_amount(quotation_queryset),
+                "fo_generated": final_offer_count,
+                "fo_amount": total_amount(final_offer_queryset),
+                "cpo_received": cpo_count,
+                "cpo_amount": total_amount(cpo_queryset),
+                "total_so": sales_order_count,
+                "so_amount": total_amount(sales_order_queryset),
+                "conversion_rates": {
+                    "quotation_to_fo": conversion_rate(final_offer_count, quotation_count),
+                    "quotation_to_cpo": conversion_rate(cpo_count, quotation_count),
+                    "cpo_to_sales_order": conversion_rate(sales_orders_from_cpo, cpo_count),
+                },
+            },
+            "monthly_history": monthly_history,
+        }
+    )
 
 
 class EmailLogListView(APIView):
