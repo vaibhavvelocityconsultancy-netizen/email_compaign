@@ -13,6 +13,7 @@ from rest_framework.test import APIClient
 
 from .models import (
     Batch,
+    
     BatchLead,
     Channel,
     City,
@@ -25,6 +26,7 @@ from .models import (
     OpportunityModule,
     Quotation,
     QuotationItem,
+    SalesOrder,
     Sequence,
     State,
     Task,
@@ -617,6 +619,79 @@ class CampaignSequenceAPITests(TestCase):
 		self.assertTrue(lead.whatsapp_opt_in)
 
 
+class OrderDashboardAPITests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="order-dashboard-user",
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_returns_commercial_stage_totals_and_monthly_history(self):
+        company = Company.objects.create(name="Dashboard Company")
+        quotation = Quotation.objects.create(
+            quotation_number="QT-DASH-1001",
+            quotation_date="2026-04-15",
+            created_by=self.user,
+            final_offer_generated=True,
+            cpo_created=True,
+            cpo_date="2026-04-20",
+            total_amount=Decimal("1180.00"),
+        )
+        Quotation.objects.create(
+            quotation_number="QT-DASH-1002",
+            quotation_date="2026-05-10",
+            created_by=self.user,
+            total_amount=Decimal("590.00"),
+        )
+        SalesOrder.objects.create(
+            so_number="SO-DASH-1001",
+            so_date="2026-04-25",
+            quotation=quotation,
+            company=company,
+            total_amount=Decimal("1180.00"),
+            created_by=self.user,
+        )
+
+        response = self.client.get(
+            "/api/order-dashboard/",
+            {
+                "period": "custom",
+                "start_date": "2026-04-01",
+                "end_date": "2026-05-31",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["summary"]["total_quotations"], 2)
+        self.assertEqual(response.data["summary"]["quotations_amount"], 1770.0)
+        self.assertEqual(response.data["summary"]["fo_generated"], 1)
+        self.assertEqual(response.data["summary"]["cpo_received"], 1)
+        self.assertEqual(response.data["summary"]["total_so"], 1)
+        self.assertEqual(len(response.data["monthly_history"]), 2)
+        self.assertEqual(response.data["monthly_history"][0]["month"], "Apr 2026")
+        self.assertEqual(response.data["monthly_history"][0]["quotations"], 1)
+        self.assertEqual(response.data["monthly_history"][0]["fo"], 1)
+        self.assertEqual(response.data["monthly_history"][0]["cpo"], 1)
+        self.assertEqual(response.data["monthly_history"][0]["so"], 1)
+
+    def test_rejects_invalid_order_dashboard_period(self):
+        response = self.client.get(
+            "/api/order-dashboard/", {"period": "daily", "year": "2026"}
+        )
+        self.assertEqual(response.status_code, 400)
+
+        response = self.client.get(
+            "/api/order-dashboard/",
+            {
+                "period": "custom",
+                "start_date": "2026-06-01",
+                "end_date": "2026-05-01",
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+
+
 class TaskActivitiesAPITests(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -632,10 +707,16 @@ class TaskActivitiesAPITests(TestCase):
         self.today = timezone.localdate()
 
     def create_task(self, title, followup_date, status="PENDING", **kwargs):
+        task_regarding = kwargs.pop("task_regarding", "MISCELLANEOUS")
+        reference_id = kwargs.pop(
+            "reference_id",
+            "" if task_regarding.upper() == "MISCELLANEOUS" else "test-reference",
+        )
         return Task.objects.create(
             title=title,
             module="LEAD",
-            task_regarding="MISCELLANEOUS",
+            task_regarding=task_regarding,
+            reference_id=reference_id,
             followup_date=followup_date,
             status=status,
             created_by=self.user,
@@ -683,3 +764,127 @@ class TaskActivitiesAPITests(TestCase):
             for group in response.data.values()
             for task in group["tasks"]
         ])
+
+    def test_followup_change_records_previous_date_and_remark(self):
+        previous_date = self.today - timedelta(days=2)
+        task = self.create_task(
+            "Follow up",
+            previous_date,
+            remarks="Call the customer",
+        )
+
+        response = self.client.patch(
+            f"/api/tasks/{task.id}/",
+            {
+                "followup_date": str(self.today),
+                "remarks": "New reminder for next week",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["followup_date"], str(self.today))
+        self.assertEqual(len(response.data["followup_history"]), 1)
+        history_entry = response.data["followup_history"][0]
+        self.assertEqual(history_entry["followup_date"], str(previous_date))
+        self.assertEqual(history_entry["remark"], "Call the customer")
+        self.assertEqual(history_entry["updated_by"], self.user.get_username())
+        self.assertTrue(history_entry["timestamp"])
+
+    def test_edit_without_followup_date_change_does_not_add_history(self):
+        task = self.create_task("Follow up", self.today)
+
+        response = self.client.patch(
+            f"/api/tasks/{task.id}/",
+            {"remarks": "Updated task detail"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["followup_history"], [])
+
+    def test_dashboard_returns_aggregates_for_visible_tasks(self):
+        self.create_task(
+            "Miscellaneous",
+            self.today,
+            status="PENDING",
+            task_regarding="MISCELLANEOUS",
+            assigned_to=self.user,
+            priority="HIGH",
+            is_recurring=True,
+        )
+        self.create_task(
+            "Overdue",
+            self.today - timedelta(days=1),
+            status="IN_PROGRESS",
+            task_regarding="Payment",
+            assigned_to=self.user,
+            priority="MEDIUM",
+        )
+        self.create_task(
+            "Completed",
+            self.today + timedelta(days=1),
+            status="COMPLETED",
+            task_regarding="Follow Up",
+            assigned_to=self.user,
+            priority="LOW",
+        )
+        Task.objects.create(
+            title="Private task",
+            module="LEAD",
+            task_regarding="MISCELLANEOUS",
+            followup_date=self.today,
+            status="PENDING",
+            created_by=self.other_user,
+            assigned_to=self.other_user,
+        )
+
+        response = self.client.get("/api/tasks/dashboard/")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["total"], 3)
+        self.assertEqual(
+            {row["status"]: row["count"] for row in response.data["by_status"]},
+            {"COMPLETED": 1, "IN_PROGRESS": 1, "PENDING": 1},
+        )
+        self.assertEqual(
+            {row["priority"]: row["count"] for row in response.data["by_priority"]},
+            {"HIGH": 1, "LOW": 1, "MEDIUM": 1},
+        )
+        self.assertEqual(
+            {row["module"]: row["count"] for row in response.data["by_module"]},
+            {"LEAD": 3},
+        )
+        self.assertEqual(response.data["in_progress"], 1)
+        self.assertEqual(response.data["pending"], 1)
+        self.assertEqual(response.data["recurring"], 1)
+        self.assertEqual(response.data["overdue"], 1)
+        self.assertEqual(response.data["due_today"], 1)
+        self.assertEqual(response.data["upcoming"], 0)
+        self.assertEqual(response.data["miscellaneous"], 1)
+        self.assertEqual(response.data["completed"], 1)
+
+    def test_dashboard_filters_assignee_without_loading_a_user_model(self):
+        self.user.is_staff = True
+        self.user.save(update_fields=["is_staff"])
+        Task.objects.create(
+            title="Other user's task",
+            module="LEAD",
+            task_regarding="MISCELLANEOUS",
+            followup_date=self.today,
+            status="PENDING",
+            created_by=self.other_user,
+            assigned_to=self.other_user,
+        )
+
+        response = self.client.get(
+            "/api/tasks/dashboard/", {"user_id": self.other_user.pk}
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["total"], 1)
+
+        invalid_response = self.client.get(
+            "/api/tasks/dashboard/", {"user_id": "not-a-valid-id"}
+        )
+        self.assertEqual(invalid_response.status_code, 400)
