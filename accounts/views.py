@@ -1,9 +1,45 @@
-from rest_framework import permissions, status
+from django.contrib.auth import get_user_model
+from rest_framework import permissions, status, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .serializers import LoginSerializer, LogoutSerializer, RefreshSerializer, RegisterSerializer, UserInfoSerializer
+from .models import Module, Role, RolePermission
+from .serializers import (
+    LoginSerializer,
+    LogoutSerializer,
+    ModuleSerializer,
+    RefreshSerializer,
+    RegisterSerializer,
+    RolePermissionSerializer,
+    RoleSerializer,
+    UserInfoSerializer,
+    UserManagementSerializer,
+)
+
+
+class UserViewSet(viewsets.ModelViewSet):
+    queryset = get_user_model().objects.all().order_by("id")
+    serializer_class = UserManagementSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+
+class RoleViewSet(viewsets.ModelViewSet):
+    queryset = Role.objects.all().order_by("id")
+    serializer_class = RoleSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+
+class ModuleViewSet(viewsets.ModelViewSet):
+    queryset = Module.objects.all().order_by("id")
+    serializer_class = ModuleSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+
+class RolePermissionViewSet(viewsets.ModelViewSet):
+    queryset = RolePermission.objects.select_related("role", "module").all().order_by("id")
+    serializer_class = RolePermissionSerializer
+    permission_classes = [permissions.IsAdminUser]
 
 
 class LoginView(APIView):
@@ -57,4 +93,3 @@ class CurrentUserView(APIView):
 
     def get(self, request):
         return Response(UserInfoSerializer(request.user).data, status=status.HTTP_200_OK)
-
