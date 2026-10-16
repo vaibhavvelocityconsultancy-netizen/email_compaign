@@ -301,6 +301,7 @@ class BatchLead(models.Model):
     replied = models.BooleanField(default=False)
     replied_at = models.DateTimeField(null=True, blank=True)
     unsubscribed = models.BooleanField(default=False)
+    unsubscribed_at = models.DateTimeField(null=True, blank=True)
     completed = models.BooleanField(default=False)
     last_email_sent_at = models.DateTimeField(null=True, blank=True)
 
@@ -309,6 +310,19 @@ class BatchLead(models.Model):
 
     def __str__(self):
         return f"{self.batch.name} - {self.lead}"
+
+
+class EmailSuppression(models.Model):
+    email = models.EmailField(unique=True)
+    unsubscribed_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        self.email = self.email.strip().lower()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.email
 
 
 class MessageLog(models.Model):
@@ -488,7 +502,7 @@ class OpportunityModule(models.Model):
     )
 
     remarks = models.TextField(blank=True)
-
+  
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

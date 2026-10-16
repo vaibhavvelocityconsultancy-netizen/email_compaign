@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Email preferences</title>
+    <style>
+      body { background: #f5f7fa; color: #202a35; font: 16px Arial, sans-serif; margin: 0; }
+      main { background: #fff; border-radius: 12px; margin: 10vh auto; max-width: 480px; padding: 32px; }
+      button { background: #1f5eff; border: 0; border-radius: 6px; color: #fff; cursor: pointer; font: inherit; padding: 12px 18px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Email subscription</h1>
+      {% if completed %}
+        <p>You have been unsubscribed from marketing emails.</p>
+        {% if mailgun_sync_failed %}
+          <p>Your request is saved and this system will stop future campaign emails. Mailgun could not confirm the suppression update; please contact support if you continue receiving messages.</p>
+        {% endif %}
+      {% elif already_unsubscribed %}
+        <p>This email address is already unsubscribed from marketing emails.</p>
+      {% else %}
+        <p>Confirm that you no longer want to receive marketing emails.</p>
+        <form method="post">
+          <button type="submit">Unsubscribe</button>
+        </form>
+      {% endif %}
+    </main>
+  </body>
+</html>

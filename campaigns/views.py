@@ -4,6 +4,7 @@ from textwrap import wrap
 
 from django.core.files.base import ContentFile
 from django.core.exceptions import ValidationError
+from django.core.exceptions import ImproperlyConfigured
 from django.forms import models
 from django.shortcuts import get_object_or_404, render
 from django.db.models import Count, Q
@@ -19,6 +20,7 @@ from rest_framework.permissions import IsAuthenticated
 import csv
 import hashlib
 import hmac
+import logging
 import re
 from calendar import monthrange
 from datetime import date, datetime, timedelta, timezone as dt_timezone
@@ -38,6 +40,7 @@ from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.csrf import csrf_exempt
+import requests
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
@@ -85,6 +88,15 @@ from .models import (
     Task,
     TaskAttachment,
 )
+from campaigns.unsubscribe import (
+    is_email_suppressed,
+    record_unsubscribe,
+    resolve_unsubscribe_token,
+    sync_mailgun_suppression,
+)
+
+
+logger = logging.getLogger(__name__)
 
 # ------------------------------------- masters ----------------------
 
@@ -1320,6 +1332,49 @@ class BatchViewSet(viewsets.ModelViewSet):
 # webhook
 
 
+@csrf_exempt
+def campaign_unsubscribe(request, token):
+    if request.method not in ("GET", "POST"):
+        return HttpResponse("Method not allowed.", status=405)
+
+    batch_lead = resolve_unsubscribe_token(token)
+    if batch_lead is None:
+        return HttpResponse(
+            "This unsubscribe link is invalid or no longer valid.", status=404
+        )
+
+    if request.method == "GET":
+        return render(
+            request,
+            "campaigns/unsubscribe.html",
+            {
+                "already_unsubscribed": (
+                    batch_lead.unsubscribed or is_email_suppressed(batch_lead.email)
+                ),
+                "completed": False,
+                "mailgun_sync_failed": False,
+            },
+        )
+
+    record_unsubscribe(batch_lead.email)
+    mailgun_sync_failed = False
+    try:
+        sync_mailgun_suppression(batch_lead.email)
+    except (ImproperlyConfigured, requests.RequestException):
+        logger.exception("Could not sync an unsubscribe to Mailgun.")
+        mailgun_sync_failed = True
+
+    return render(
+        request,
+        "campaigns/unsubscribe.html",
+        {
+            "already_unsubscribed": False,
+            "completed": True,
+            "mailgun_sync_failed": mailgun_sync_failed,
+        },
+    )
+
+
 def _is_valid_mailgun_signature(signature_data):
     signing_key = getattr(settings, "ANYMAIL", {}).get(
         "MAILGUN_WEBHOOK_SIGNING_KEY", ""
@@ -1376,6 +1431,13 @@ def mailgun_webhook(request):
                 {"status": "ignored", "event": event, "message": "Event is not handled"}
             )
 
+        if event == "unsubscribed":
+            if not recipient:
+                return JsonResponse(
+                    {"error": "Unsubscribe event has no recipient."}, status=400
+                )
+            record_unsubscribe(recipient)
+
         message_id = (
             event_data.get("message", {}).get("headers", {}).get("message-id", "")
         )
@@ -1400,8 +1462,12 @@ def mailgun_webhook(request):
             )
 
         if not email_log:
-            print("MessageLog not found for:", recipient)
+            if event == "unsubscribed":
+                return JsonResponse(
+                    {"status": "suppressed", "event": event}
+                )
 
+            logger.warning("MessageLog not found for Mailgun recipient %s", recipient)
             return JsonResponse(
                 {"status": "not_found", "event": event, "recipient": recipient}
             )
@@ -1411,13 +1477,6 @@ def mailgun_webhook(request):
         email_log.save(update_fields=["status"])
 
         print(f"MessageLog {email_log.id} updated: " f"{recipient} → {new_status}")
-
-        # If unsubscribed, also update BatchLead
-        if event == "unsubscribed":
-            batch_lead = email_log.batch_lead
-
-            batch_lead.unsubscribed = True
-            batch_lead.save(update_fields=["unsubscribed"])
 
         return JsonResponse(
             {
@@ -1436,14 +1495,14 @@ def mailgun_webhook(request):
         )
 
     except Exception as e:
-        print("Mailgun webhook error:", str(e))
+        logger.exception("Mailgun webhook failed.")
 
         return JsonResponse(
             {
                 "status": "error",
-                "error": str(e),
+                "error": "Mailgun webhook processing failed.",
             },
-            status=400,
+            status=500,
         )
 
 

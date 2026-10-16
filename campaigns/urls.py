@@ -40,6 +40,7 @@ from .views import (
     get_activities,
     mailgun_inbound_webhook,
     mailgun_webhook,
+    campaign_unsubscribe,
     whatsapp_webhook,
 )
 
@@ -167,7 +168,12 @@ urlpatterns = [
         name="email-log-list",
     ),
       path(
-        "webhooks/mailgun/",
+          "email/unsubscribe/<str:token>/",
+          campaign_unsubscribe,
+          name="campaign-unsubscribe",
+      ),
+      path(
+          "webhooks/mailgun/",
         mailgun_webhook,
         name="mailgun-webhook"
     ),
