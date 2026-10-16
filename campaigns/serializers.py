@@ -9,6 +9,7 @@ from .models import (
     Company,
     CompanyContact,
     Country,
+    EmailSuppression,
     MessageLog,
     MessageTemplate,
     Opportunity,
@@ -505,21 +506,47 @@ class BatchSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "created_at"]
 
+    @staticmethod
+    def _make_batch_leads(batch, leads, existing_ids=None):
+        existing_ids = existing_ids or set()
+        eligible_leads = [lead for lead in leads if lead.pk not in existing_ids]
+        emails = [
+            lead.contact.email.strip().lower()
+            for lead in eligible_leads
+            if lead.contact and lead.contact.email
+        ]
+        suppressed_emails = set(
+            EmailSuppression.objects.filter(email__in=emails).values_list(
+                "email", flat=True
+            )
+        )
+        now = timezone.now()
+        return [
+            BatchLead(
+                batch=batch,
+                lead=lead,
+                email=lead.contact.email if lead.contact else "",
+                phone=lead.contact.phone if lead.contact else "",
+                unsubscribed=(
+                    bool(lead.contact and lead.contact.email)
+                    and lead.contact.email.strip().lower() in suppressed_emails
+                ),
+                unsubscribed_at=(
+                    now
+                    if lead.contact
+                    and lead.contact.email
+                    and lead.contact.email.strip().lower() in suppressed_emails
+                    else None
+                ),
+            )
+            for lead in eligible_leads
+        ]
+
     @transaction.atomic
     def create(self, validated_data):
         leads = validated_data.pop("lead_ids", [])
         batch = super().create(validated_data)
-        BatchLead.objects.bulk_create(
-            [
-                BatchLead(
-                    batch=batch,
-                    lead=lead,
-                    email=lead.contact.email if lead.contact else "",
-                    phone=lead.contact.phone if lead.contact else "",
-                )
-                for lead in leads
-            ]
-        )
+        BatchLead.objects.bulk_create(self._make_batch_leads(batch, leads))
         return batch
 
     @transaction.atomic
@@ -529,16 +556,7 @@ class BatchSerializer(serializers.ModelSerializer):
         if leads is not None:
             existing_ids = set(batch.batch_leads.values_list("lead_id", flat=True))
             BatchLead.objects.bulk_create(
-                [
-                    BatchLead(
-                        batch=batch,
-                        lead=lead,
-                        email=lead.contact.email if lead.contact else "",
-                        phone=lead.contact.phone if lead.contact else "",
-                    )
-                    for lead in leads
-                    if lead.pk not in existing_ids
-                ]
+                self._make_batch_leads(batch, leads, existing_ids)
             )
         return batch
 
@@ -556,10 +574,11 @@ class BatchLeadSerializer(serializers.ModelSerializer):
             "replied",
             "replied_at",
             "unsubscribed",
+            "unsubscribed_at",
             "completed",
             "last_email_sent_at",
         ]
-        read_only_fields = ["id"]
+        read_only_fields = ["id", "unsubscribed", "unsubscribed_at"]
 
 
 class MessageLogSerializer(serializers.ModelSerializer):

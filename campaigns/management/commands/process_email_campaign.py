@@ -1,5 +1,6 @@
 import os
 import imaplib
+from html import escape
 
 from datetime import timedelta
 from email.mime.image import MIMEImage
@@ -10,6 +11,10 @@ from django.core.mail import EmailMultiAlternatives
 from django.utils import timezone
 
 from campaigns.models import Batch, BatchLead, EmailLog
+from campaigns.unsubscribe import (
+    get_unsubscribe_url,
+    is_email_suppressed,
+)
 
 
 def save_to_sent(msg):
@@ -102,6 +107,22 @@ class Command(BaseCommand):
                         self.stdout.write(
                             self.style.WARNING(
                                 f"SKIP lead {batch_lead.lead_id}: no recipient email is available."
+                            )
+                        )
+                        continue
+
+                    if batch_lead.unsubscribed or is_email_suppressed(
+                        batch_lead.email
+                    ):
+                        if not batch_lead.unsubscribed:
+                            batch_lead.unsubscribed = True
+                            batch_lead.unsubscribed_at = timezone.now()
+                            batch_lead.save(
+                                update_fields=["unsubscribed", "unsubscribed_at"]
+                            )
+                        self.stdout.write(
+                            self.style.WARNING(
+                                f"SKIP {batch_lead.email} - recipient is unsubscribed"
                             )
                         )
                         continue
@@ -291,6 +312,14 @@ class Command(BaseCommand):
                                 f"{signature}"
                             )
 
+                    unsubscribe_url = get_unsubscribe_url(batch_lead)
+                    body += (
+                        '<p style="margin-top:24px;font-size:12px;color:#666;">'
+                        "Don't want to receive these emails? "
+                        f'<a href="{escape(unsubscribe_url, quote=True)}">'
+                        "Unsubscribe</a></p>"
+                    )
+
                     # --------------------------------
                     # CREATE EMAIL
                     # --------------------------------
@@ -313,8 +342,12 @@ class Command(BaseCommand):
                         from_email=from_email,
                         to=[batch_lead.email],
                         reply_to=[reply_to_email],
-                )
+                    )
                     msg.content_subtype = "html"
+                    msg.extra_headers = {
+                        "List-Unsubscribe": f"<{unsubscribe_url}>",
+                        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+                    }
 
                     # Needed for inline logo
                     if template.logo:
@@ -366,6 +399,19 @@ class Command(BaseCommand):
                     # --------------------------------
                     # SEND EMAIL
                     # --------------------------------
+
+                    if is_email_suppressed(batch_lead.email):
+                        batch_lead.unsubscribed = True
+                        batch_lead.unsubscribed_at = timezone.now()
+                        batch_lead.save(
+                            update_fields=["unsubscribed", "unsubscribed_at"]
+                        )
+                        self.stdout.write(
+                            self.style.WARNING(
+                                f"SKIP {batch_lead.email} - recipient unsubscribed before send"
+                            )
+                        )
+                        continue
 
                     msg.send()
                     mailgun_message_id = msg.message().get("Message-ID", "")
