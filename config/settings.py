@@ -105,9 +105,9 @@ REST_FRAMEWORK = {
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'crms_dev',
-        'USER': 'root',
-        'PASSWORD': 'root',
+        'NAME': 'sharpe36_email_compaign',
+        'USER': 'emailcrm_user',
+        'PASSWORD': '72X,ka+V9LnOw@T%',
         'HOST': 'localhost',
         'PORT': '3306',
     }
