@@ -109,7 +109,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'sharpe36_email_compaign',
         'USER': 'sharpe36_emailcrm_user',
-        'PASSWORD': '72X,ka+V9LnOw@T%',
+        'PASSWORD': 'hY5-,84HsvEIwE0=',
         'HOST': 'localhost',
         'PORT': '3306',
     }
