@@ -1,5 +1,6 @@
 import os
 import imaplib
+import logging
 from html import escape
 
 from datetime import timedelta
@@ -8,6 +9,7 @@ from email.mime.image import MIMEImage
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.core.mail import EmailMultiAlternatives
+from django.db import transaction
 from django.utils import timezone
 
 from campaigns.models import Batch, BatchLead, Channel, EmailLog
@@ -15,6 +17,8 @@ from campaigns.unsubscribe import (
     get_unsubscribe_url,
     is_email_suppressed,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def save_to_sent(msg):
@@ -72,6 +76,7 @@ class Command(BaseCommand):
             help="Send the next step immediately, ignoring its scheduled delay.",
         )
 
+    @transaction.atomic
     def handle(self, *args, **kwargs):
 
         now = timezone.now()
@@ -88,8 +93,35 @@ class Command(BaseCommand):
             active_batches = active_batches.filter(pk=batch_id)
 
         if not active_batches.exists():
+            if batch_id is not None:
+                requested_batch = Batch.objects.filter(pk=batch_id).first()
+                if requested_batch is None:
+                    logger.warning(
+                        "Skipping campaign processing: batch %s does not exist.",
+                        batch_id,
+                    )
+                    message = f"Batch {batch_id} does not exist."
+                elif requested_batch.status != Batch.Status.ACTIVE:
+                    logger.info(
+                        "Skipping batch %s: campaign status is %s.",
+                        batch_id,
+                        requested_batch.status,
+                    )
+                    message = (
+                        f"Batch '{requested_batch.name}' is "
+                        f"{requested_batch.status}, not active."
+                    )
+                else:
+                    logger.info(
+                        "Skipping batch %s: campaign channel is not email.",
+                        batch_id,
+                    )
+                    message = f"Batch '{requested_batch.name}' is not an email campaign."
+            else:
+                logger.info("No active email campaigns are due for processing.")
+                message = "No active batches found."
             self.stdout.write(
-                self.style.WARNING("No active batches found.")
+                self.style.WARNING(message)
             )
             return
 
@@ -101,6 +133,12 @@ class Command(BaseCommand):
             )
 
             if not steps:
+                logger.warning(
+                    "Skipping batch %s (%s): sequence %s has no steps.",
+                    batch.pk,
+                    batch.name,
+                    batch.sequence_id,
+                )
                 self.stdout.write(
                     self.style.WARNING(
                         f"Batch '{batch.name}' has no sequence steps."
@@ -109,18 +147,59 @@ class Command(BaseCommand):
                 continue
 
             # Get leads that still need emails
-            batch_leads = batch.batch_leads.filter(
-                replied=False,
-                unsubscribed=False,
-                completed=False
+            batch_leads = (
+                batch.batch_leads.select_for_update()
+                .select_related("lead", "lead__company", "lead__contact")
+                .all()
             )
             if batch_lead_id is not None:
                 batch_leads = batch_leads.filter(pk=batch_lead_id)
 
+            if not batch_leads.exists():
+                logger.warning(
+                    "Batch %s (%s) has no recipient records to process.",
+                    batch.pk,
+                    batch.name,
+                )
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Batch '{batch.name}' has no recipient records."
+                    )
+                )
+                continue
+
             for batch_lead in batch_leads:
 
+                step = None
                 try:
+                    if batch_lead.replied:
+                        logger.info(
+                            "SKIP batch %s lead %s: recipient has replied.",
+                            batch.pk,
+                            batch_lead.lead_id,
+                        )
+                        continue
+                    if batch_lead.unsubscribed:
+                        logger.info(
+                            "SKIP batch %s lead %s: recipient is unsubscribed.",
+                            batch.pk,
+                            batch_lead.lead_id,
+                        )
+                        continue
+                    if batch_lead.completed:
+                        logger.info(
+                            "SKIP batch %s lead %s: sequence is already completed.",
+                            batch.pk,
+                            batch_lead.lead_id,
+                        )
+                        continue
+
                     if not batch_lead.email:
+                        logger.warning(
+                            "SKIP batch %s lead %s: no recipient email is available.",
+                            batch.pk,
+                            batch_lead.lead_id,
+                        )
                         self.stdout.write(
                             self.style.WARNING(
                                 f"SKIP lead {batch_lead.lead_id}: no recipient email is available."
@@ -146,12 +225,27 @@ class Command(BaseCommand):
 
                     # current_step starts from 0
                     current_step = batch_lead.current_step
+                    if current_step < 0:
+                        logger.warning(
+                            "SKIP batch %s lead %s (%s): current_step %s is invalid.",
+                            batch.pk,
+                            batch_lead.lead_id,
+                            batch_lead.email,
+                            current_step,
+                        )
+                        continue
 
                     # No more steps
                     if current_step >= len(steps):
-
+                        logger.info(
+                            "Marking batch %s lead %s complete: current_step %s "
+                            "is beyond the %s available steps.",
+                            batch.pk,
+                            batch_lead.lead_id,
+                            current_step,
+                            len(steps),
+                        )
                         batch_lead.completed = True
-
                         batch_lead.save(
                             update_fields=["completed"]
                         )
@@ -169,7 +263,13 @@ class Command(BaseCommand):
 
                         # Step 0 should only be sent once
                         if batch_lead.last_email_sent_at:
-
+                            logger.warning(
+                                "SKIP batch %s lead %s (%s): first step already has "
+                                "a sent timestamp while current_step is 0.",
+                                batch.pk,
+                                batch_lead.lead_id,
+                                batch_lead.email,
+                            )
                             self.stdout.write(
                                 f"SKIP {batch_lead.email} - "
                                 f"Step 0 already sent"
@@ -186,7 +286,14 @@ class Command(BaseCommand):
 
                         # Follow-up requires previous email
                         if not batch_lead.last_email_sent_at:
-
+                            logger.warning(
+                                "SKIP batch %s lead %s (%s): current_step is %s but "
+                                "there is no previous email timestamp.",
+                                batch.pk,
+                                batch_lead.lead_id,
+                                batch_lead.email,
+                                current_step,
+                            )
                             self.stdout.write(
                                 f"SKIP {batch_lead.email} - "
                                 f"No previous email timestamp"
@@ -204,7 +311,16 @@ class Command(BaseCommand):
 
                     # Not time yet
                     if send_after > now and not force:
-
+                        logger.info(
+                            "SKIP batch %s lead %s (%s): step %s is due at %s "
+                            "(now %s).",
+                            batch.pk,
+                            batch_lead.lead_id,
+                            batch_lead.email,
+                            step.step_number,
+                            send_after,
+                            now,
+                        )
                         self.stdout.write(
                             f"SKIP {batch_lead.email} - "
                             f"Step {step.step_number} | "
@@ -484,22 +600,37 @@ class Command(BaseCommand):
                             f"Step {step.step_number}"
                         )
                     )
+                    logger.info(
+                        "Sent batch %s lead %s (%s), step %s.",
+                        batch.pk,
+                        batch_lead.lead_id,
+                        batch_lead.email,
+                        step.step_number,
+                    )
 
                 except Exception as e:
+                    logger.exception(
+                        "Failed sending batch %s lead %s (%s), step %s.",
+                        batch.pk,
+                        batch_lead.lead_id,
+                        batch_lead.email,
+                        step.step_number if step else "unknown",
+                    )
 
                     # --------------------------------
                     # LOG FAILED EMAIL
                     # --------------------------------
 
-                    EmailLog.objects.create(
-                        batch_lead=batch_lead,
-                        template=step.template,
-                        step_number=step.step_number,
-                        to_email=batch_lead.email,
-                        subject=step.template.subject,
-                        status=EmailLog.Status.FAILED,
-                        error=str(e),
-                    )
+                    if step is not None:
+                        EmailLog.objects.create(
+                            batch_lead=batch_lead,
+                            template=step.template,
+                            step_number=step.step_number,
+                            to_email=batch_lead.email,
+                            subject=step.template.subject,
+                            status=EmailLog.Status.FAILED,
+                            error=str(e),
+                        )
 
                     self.stdout.write(
                         self.style.ERROR(

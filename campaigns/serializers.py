@@ -512,9 +512,11 @@ class BatchSerializer(serializers.ModelSerializer):
         existing_ids = existing_ids or set()
         eligible_leads = [lead for lead in leads if lead.pk not in existing_ids]
         emails = [
-            lead.contact.email.strip().lower()
+            ((lead.contact.email if lead.contact else "") or lead.email or "")
+            .strip()
+            .lower()
             for lead in eligible_leads
-            if lead.contact and lead.contact.email
+            if (lead.contact and lead.contact.email) or lead.email
         ]
         suppressed_emails = set(
             EmailSuppression.objects.filter(email__in=emails).values_list(
@@ -522,26 +524,22 @@ class BatchSerializer(serializers.ModelSerializer):
             )
         )
         now = timezone.now()
-        return [
-            BatchLead(
-                batch=batch,
-                lead=lead,
-                email=lead.contact.email if lead.contact else "",
-                phone=lead.contact.phone if lead.contact else "",
-                unsubscribed=(
-                    bool(lead.contact and lead.contact.email)
-                    and lead.contact.email.strip().lower() in suppressed_emails
-                ),
-                unsubscribed_at=(
-                    now
-                    if lead.contact
-                    and lead.contact.email
-                    and lead.contact.email.strip().lower() in suppressed_emails
-                    else None
-                ),
+        batch_leads = []
+        for lead in eligible_leads:
+            email = ((lead.contact.email if lead.contact else "") or lead.email or "")
+            phone = ((lead.contact.phone if lead.contact else "") or lead.phone or "")
+            is_suppressed = email.strip().lower() in suppressed_emails
+            batch_leads.append(
+                BatchLead(
+                    batch=batch,
+                    lead=lead,
+                    email=email,
+                    phone=phone,
+                    unsubscribed=is_suppressed,
+                    unsubscribed_at=now if is_suppressed else None,
+                )
             )
-            for lead in eligible_leads
-        ]
+        return batch_leads
 
     @transaction.atomic
     def create(self, validated_data):
