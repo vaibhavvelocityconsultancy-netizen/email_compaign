@@ -1306,7 +1306,94 @@ class BatchViewSet(viewsets.ModelViewSet):
     serializer_class = BatchSerializer
 
     def perform_create(self, serializer):
-        serializer.save()
+        batch = serializer.save()
+        self._automatic_email_result = None
+        transaction.on_commit(
+            lambda batch_id=batch.pk: setattr(
+                self,
+                "_automatic_email_result",
+                self._process_immediate_email_campaign(batch_id),
+            )
+        )
+
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+        automatic_email_result = getattr(self, "_automatic_email_result", None)
+        if automatic_email_result is not None:
+            response.data["automatic_email"] = automatic_email_result
+        return response
+
+    @staticmethod
+    def _process_immediate_email_campaign(batch_id):
+        try:
+            batch = (
+                Batch.objects.select_related("sequence")
+                .prefetch_related("sequence__steps")
+                .get(pk=batch_id)
+            )
+        except Batch.DoesNotExist:
+            logger.warning(
+                "Skipping immediate campaign processing: batch %s no longer exists.",
+                batch_id,
+            )
+            return None
+
+        if batch.status != Batch.Status.ACTIVE:
+            logger.info(
+                "Skipping immediate processing for batch %s: status is %s.",
+                batch.pk,
+                batch.status,
+            )
+            return None
+        if batch.sequence.channel != Channel.EMAIL:
+            logger.info(
+                "Skipping immediate processing for batch %s: channel is %s.",
+                batch.pk,
+                batch.sequence.channel,
+            )
+            return None
+
+        first_step = batch.sequence.steps.order_by("step_number").first()
+        if first_step is None:
+            logger.warning(
+                "Skipping immediate processing for batch %s: sequence %s has no steps.",
+                batch.pk,
+                batch.sequence_id,
+            )
+            return None
+        if first_step.delay_days != 0 or first_step.delay_minutes != 0:
+            logger.info(
+                "Skipping immediate processing for batch %s: first step delay is "
+                "%s days and %s minutes.",
+                batch.pk,
+                first_step.delay_days,
+                first_step.delay_minutes,
+            )
+            return None
+
+        output = StringIO()
+        try:
+            call_command(
+                "process_email_campaign",
+                batch_id=batch.pk,
+                stdout=output,
+            )
+        except Exception:
+            logger.exception(
+                "Immediate email campaign processing failed for batch %s.",
+                batch.pk,
+            )
+            raise
+
+        command_output = output.getvalue()
+        sent_count = command_output.count("Sent to ")
+        failed_count = command_output.count("Failed ")
+        logger.info(
+            "Immediate email campaign processing finished for batch %s: %s",
+            batch.pk,
+            command_output.strip() or "no command output",
+        )
+        return {"sent": sent_count, "failed": failed_count}
 
     @action(detail=True, methods=["get"], url_path="leads")
     def get_batch_leads(self, request, pk=None):
@@ -1374,7 +1461,16 @@ class BatchViewSet(viewsets.ModelViewSet):
         batch = self.get_object()
         batch.status = Batch.Status.ACTIVE
         batch.save(update_fields=["status"])
-        return Response({"status": batch.status}, status=status.HTTP_200_OK)
+        automatic_email_result = []
+        transaction.on_commit(
+            lambda batch_id=batch.pk: automatic_email_result.append(
+                self._process_immediate_email_campaign(batch_id)
+            )
+        )
+        response_data = {"status": batch.status}
+        if automatic_email_result and automatic_email_result[0] is not None:
+            response_data["automatic_email"] = automatic_email_result[0]
+        return Response(response_data, status=status.HTTP_200_OK)
 
 
 # webhook
