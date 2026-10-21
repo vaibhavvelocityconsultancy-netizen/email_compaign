@@ -177,7 +177,10 @@ class Command(BaseCommand):
 
                             continue
 
-                        send_after = batch.created_at
+                        send_after = batch.created_at + timedelta(
+                            days=step.delay_days,
+                            minutes=step.delay_minutes
+                        )
 
                     else:
 
