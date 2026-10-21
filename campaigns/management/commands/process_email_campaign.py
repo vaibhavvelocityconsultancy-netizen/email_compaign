@@ -216,6 +216,12 @@ class Command(BaseCommand):
                             batch_lead.save(
                                 update_fields=["unsubscribed", "unsubscribed_at"]
                             )
+                        logger.warning(
+                            "SKIP batch %s lead %s (%s): recipient is suppressed.",
+                            batch.pk,
+                            batch_lead.lead_id,
+                            batch_lead.email,
+                        )
                         self.stdout.write(
                             self.style.WARNING(
                                 f"SKIP {batch_lead.email} - recipient is unsubscribed"
