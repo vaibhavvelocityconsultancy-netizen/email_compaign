@@ -10,7 +10,7 @@ from django.core.management.base import BaseCommand
 from django.core.mail import EmailMultiAlternatives
 from django.utils import timezone
 
-from campaigns.models import Batch, BatchLead, EmailLog
+from campaigns.models import Batch, BatchLead, Channel, EmailLog
 from campaigns.unsubscribe import (
     get_unsubscribe_url,
     is_email_suppressed,
@@ -63,14 +63,29 @@ class Command(BaseCommand):
 
     help = "Send scheduled campaign emails"
 
+    def add_arguments(self, parser):
+        parser.add_argument("--batch-id", type=int)
+        parser.add_argument("--batch-lead-id", type=int)
+        parser.add_argument(
+            "--force",
+            action="store_true",
+            help="Send the next step immediately, ignoring its scheduled delay.",
+        )
+
     def handle(self, *args, **kwargs):
 
         now = timezone.now()
+        batch_id = kwargs.get("batch_id")
+        batch_lead_id = kwargs.get("batch_lead_id")
+        force = kwargs.get("force", False)
 
         # Get active batches
         active_batches = Batch.objects.filter(
-            status=Batch.Status.ACTIVE
+            status=Batch.Status.ACTIVE,
+            sequence__channel=Channel.EMAIL,
         ).select_related("sequence")
+        if batch_id is not None:
+            active_batches = active_batches.filter(pk=batch_id)
 
         if not active_batches.exists():
             self.stdout.write(
@@ -99,6 +114,8 @@ class Command(BaseCommand):
                 unsubscribed=False,
                 completed=False
             )
+            if batch_lead_id is not None:
+                batch_leads = batch_leads.filter(pk=batch_lead_id)
 
             for batch_lead in batch_leads:
 
@@ -183,7 +200,7 @@ class Command(BaseCommand):
                         )
 
                     # Not time yet
-                    if send_after > now:
+                    if send_after > now and not force:
 
                         self.stdout.write(
                             f"SKIP {batch_lead.email} - "
@@ -331,9 +348,13 @@ class Command(BaseCommand):
                     )
 
                     reply_to_email = getattr(
-                        settings,
-                        "MAILGUN_REPLY_TO",
-                        from_email
+                        batch,
+                        "reply_to_email",
+                        "",
+                    )
+                    reply_to_email = (
+                        reply_to_email
+                        or getattr(settings, "MAILGUN_REPLY_TO", from_email)
                     )
 
                     msg = EmailMultiAlternatives(

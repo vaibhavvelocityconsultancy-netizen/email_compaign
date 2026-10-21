@@ -1,8 +1,9 @@
 from decimal import Decimal, InvalidOperation
-from io import BytesIO
+from io import BytesIO, StringIO
 from textwrap import wrap
 
 from django.core.files.base import ContentFile
+from django.core.management import call_command
 from django.core.exceptions import ValidationError
 from django.core.exceptions import ImproperlyConfigured
 from django.forms import models
@@ -1313,6 +1314,53 @@ class BatchViewSet(viewsets.ModelViewSet):
         leads = batch.batch_leads.all()
         serializer = BatchLeadSerializer(leads, many=True)
         return Response(serializer.data)
+
+    def _send_now(self, batch, batch_lead=None):
+        if batch.status != Batch.Status.ACTIVE:
+            return Response(
+                {"detail": "Resume this campaign before sending email."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if batch.sequence.channel != Channel.EMAIL:
+            return Response(
+                {"detail": "Send now is only available for email campaigns."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        output = StringIO()
+        command_options = {"batch_id": batch.pk, "force": True, "stdout": output}
+        if batch_lead is not None:
+            command_options["batch_lead_id"] = batch_lead.pk
+        call_command("process_email_campaign", **command_options)
+
+        result = output.getvalue()
+        sent_count = result.count("Sent to ")
+        failed_count = result.count("Failed ")
+        if not sent_count:
+            detail = result.strip() or "No eligible email was sent."
+            return Response(
+                {"detail": detail, "sent": 0, "failed": failed_count},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {"sent": sent_count, "failed": failed_count},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="send-now")
+    def send_now(self, request, pk=None):
+        return self._send_now(self.get_object())
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"leads/(?P<lead_id>\d+)/send-now",
+        url_name="send-lead-now",
+    )
+    def send_lead_now(self, request, pk=None, lead_id=None):
+        batch = self.get_object()
+        batch_lead = get_object_or_404(batch.batch_leads, lead_id=lead_id)
+        return self._send_now(batch, batch_lead)
 
     @action(detail=True, methods=["patch"], url_path="pause", url_name="pause")
     def pause_batch(self, request, pk=None):
