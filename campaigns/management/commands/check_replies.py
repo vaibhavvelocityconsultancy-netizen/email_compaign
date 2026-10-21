@@ -10,7 +10,7 @@ from campaigns.models import BatchLead, Channel, MessageLog
 
 
 OWN_EMAILS = {
-	"reply@***REMOVED***"
+	"reply@mg.sharpefforts.com"
 }
 
 EVENT_STATUSES = {
