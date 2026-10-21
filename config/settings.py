@@ -13,9 +13,11 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 from datetime import timedelta
 from pathlib import Path
 import os
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
 
 
 # Quick-start development settings - unsuitable for production
@@ -180,11 +182,11 @@ CPO_MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
 EMAIL_BACKEND = "anymail.backends.mailgun.EmailBackend"
-DEFAULT_FROM_EMAIL = 'SHARAD MICRO DIE & ENGG. WORKS <reply@sandbox7c6988178bc84cbbb7823d7acb738feb.mailgun.org>'
+DEFAULT_FROM_EMAIL = os.environ["DEFAULT_FROM_EMAIL"]
 ANYMAIL = {
-    "MAILGUN_API_KEY": "9632325cdbdc5166daf8099f747c594e-7543e985-2e1c41af",
-    "MAILGUN_SENDER_DOMAIN": "sandbox7c6988178bc84cbbb7823d7acb738feb.mailgun.org",
-    "MAILGUN_WEBHOOK_SIGNING_KEY": "d916c692a663193e3c7a9589e03e9fd7"
+    "MAILGUN_API_KEY": os.environ["MAILGUN_API_KEY"],
+    "MAILGUN_SENDER_DOMAIN": os.environ["MAILGUN_SENDER_DOMAIN"],
+    "MAILGUN_WEBHOOK_SIGNING_KEY": os.environ["MAILGUN_WEBHOOK_SIGNING_KEY"],
 }
 UNSUBSCRIBE_PUBLIC_BASE_URL = os.environ.get("UNSUBSCRIBE_PUBLIC_BASE_URL", "http://127.0.0.1:8000")
 MAILGUN_API_BASE_URL = os.environ.get(
