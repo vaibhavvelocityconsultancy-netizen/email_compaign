@@ -278,6 +278,7 @@ class Batch(models.Model):
     sequence = models.ForeignKey(
         Sequence, on_delete=models.CASCADE, related_name="batches"
     )
+    reply_to_email = models.EmailField(blank=True)
     enquiry_date_from = models.DateField(null=True, blank=True)
     enquiry_date_to = models.DateField(null=True, blank=True)
     # created_by = models.ForeignKey('accounts.User', on_delete=models.SET_NULL, null=True)

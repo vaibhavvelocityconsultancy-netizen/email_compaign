@@ -30,6 +30,7 @@ from .models import (
     QuotationItem,
     SalesOrder,
     Sequence,
+    SequenceStep,
     State,
     Task,
 )
@@ -72,6 +73,114 @@ class MessageLogListViewTests(TestCase):
 		self.assertEqual(response.data[0]["lead"], lead.id)
 		self.assertEqual(response.data[0]["template_name"], template.name)
 		self.assertEqual(response.data[0]["channel"], Channel.EMAIL)
+
+
+class CampaignSendNowApiTests(TestCase):
+	def setUp(self):
+		self.user = get_user_model().objects.create_user(
+			username="campaignsendnow",
+			email="campaignsendnow@example.com",
+			password="test-password",
+		)
+		self.client = APIClient()
+		self.client.force_authenticate(user=self.user)
+		self.sequence = Sequence.objects.create(name="Send now sequence")
+		self.batch = Batch.objects.create(
+			name="Send now campaign",
+			sequence=self.sequence,
+			reply_to_email="replies@example.com",
+		)
+		self.lead = Lead.objects.create(
+			name="Example recipient",
+			email="recipient@example.com",
+		)
+		self.batch_lead = BatchLead.objects.create(
+			batch=self.batch,
+			lead=self.lead,
+			email=self.lead.email,
+		)
+
+	@patch("campaigns.views.call_command")
+	def test_campaign_and_individual_lead_send_now(self, call_command_mock):
+		def write_success(_command, **options):
+			options["stdout"].write("Sent to recipient@example.com - Step 1\n")
+
+		call_command_mock.side_effect = write_success
+
+		campaign_response = self.client.post(
+			f"/api/batches/{self.batch.pk}/send-now/"
+		)
+		lead_response = self.client.post(
+			f"/api/batches/{self.batch.pk}/leads/{self.lead.pk}/send-now/"
+		)
+
+		self.assertEqual(campaign_response.status_code, 200, campaign_response.data)
+		self.assertEqual(campaign_response.data, {"sent": 1, "failed": 0})
+		self.assertEqual(lead_response.status_code, 200, lead_response.data)
+		self.assertEqual(lead_response.data, {"sent": 1, "failed": 0})
+		self.assertEqual(call_command_mock.call_count, 2)
+		self.assertTrue(call_command_mock.call_args_list[0].kwargs["force"])
+		self.assertEqual(
+			call_command_mock.call_args_list[1].kwargs["batch_lead_id"],
+			self.batch_lead.pk,
+		)
+
+	def test_paused_campaign_cannot_be_sent_manually(self):
+		self.batch.status = Batch.Status.PAUSED
+		self.batch.save(update_fields=["status"])
+
+		response = self.client.post(f"/api/batches/{self.batch.pk}/send-now/")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("Resume this campaign", response.data["detail"])
+
+	@override_settings(
+		EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+		DEFAULT_FROM_EMAIL="CRM <sender@example.com>",
+	)
+	@patch("campaigns.management.commands.process_email_campaign.save_to_sent")
+	def test_force_sends_next_step_using_campaign_reply_to(self, _save_to_sent):
+		first_template = MessageTemplate.objects.create(
+			name="First step",
+			subject="First",
+			body="First email",
+		)
+		second_template = MessageTemplate.objects.create(
+			name="Follow-up",
+			subject="Follow-up",
+			body="Follow-up email",
+		)
+		SequenceStep.objects.create(
+			sequence=self.sequence,
+			step_number=1,
+			template=first_template,
+		)
+		SequenceStep.objects.create(
+			sequence=self.sequence,
+			step_number=2,
+			template=second_template,
+			delay_days=30,
+		)
+		self.batch_lead.current_step = 1
+		self.batch_lead.last_email_sent_at = timezone.now()
+		self.batch_lead.save(update_fields=["current_step", "last_email_sent_at"])
+
+		with self.settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend"):
+			call_command(
+				"process_email_campaign",
+				batch_id=self.batch.pk,
+				batch_lead_id=self.batch_lead.pk,
+				force=True,
+				stdout=io.StringIO(),
+			)
+
+		from django.core import mail
+
+		self.assertEqual(len(mail.outbox), 1)
+		self.assertEqual(mail.outbox[0].reply_to, ["replies@example.com"])
+		self.batch_lead.refresh_from_db()
+		self.assertEqual(self.batch_lead.current_step, 2)
+		self.assertTrue(self.batch_lead.completed)
 
 
 class FinalOfferGenerationTests(TestCase):

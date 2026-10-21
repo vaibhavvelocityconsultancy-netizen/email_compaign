@@ -498,6 +498,7 @@ class BatchSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "sequence",
+            "reply_to_email",
             "lead_ids",
             "enquiry_date_from",
             "enquiry_date_to",
