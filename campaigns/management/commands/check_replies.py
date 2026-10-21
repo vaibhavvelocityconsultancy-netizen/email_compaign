@@ -10,7 +10,7 @@ from campaigns.models import BatchLead, Channel, MessageLog
 
 
 OWN_EMAILS = {
-	"reply@sandbox7c6988178bc84cbbb7823d7acb738feb.mailgun.org"
+	"reply@mg.sharpefforts.com"
 }
 
 EVENT_STATUSES = {
