@@ -489,8 +489,16 @@ class LeadCSVImportView(APIView):
 
         try:
             if extension == "csv":
-                decoded_file = csv_file.read().decode("utf-8-sig").splitlines()
-                reader = csv.DictReader(decoded_file)
+                decoded_file = csv_file.read().decode("utf-8-sig")
+                sample = decoded_file[:8192]
+                try:
+                    dialect = csv.Sniffer().sniff(sample, delimiters=",\t;|")
+                except csv.Error:
+                    dialect = csv.excel
+                reader = csv.DictReader(
+                    decoded_file.splitlines(),
+                    dialect=dialect,
+                )
                 rows = (
                     {
                         (key or "").strip().lower(): (value or "")
