@@ -568,7 +568,8 @@ class LeadCSVImportView(APIView):
                     "contact_mobile": (row.get("contact_mobile") or "").strip(),
                     "contact_email": (row.get("contact_email") or "").strip(),
                     "enquiry_for": (row.get("enquiry_for") or "LEAD").strip().upper(),
-                    "enquiry_date": _parse_import_date(row.get("enquiry_date")),
+                    "enquiry_date": _parse_import_date(row.get("enquiry_date"))
+                    or timezone.localdate().isoformat(),
                     "source": source,
                     "status": lead_status,
                     "followup_date": _parse_import_date(row.get("followup_date")),
