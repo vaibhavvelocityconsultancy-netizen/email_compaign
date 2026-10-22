@@ -134,6 +134,7 @@ class Lead(models.Model):
         ("JUNK", "Junk"),
         ("HOT", "Hot"),
         ("COLD", "Cold"),
+        ("OTHER", "Other"),
     ]
 
     # Compatibility fields used by older tests and simpler lead creation flows.
@@ -276,11 +277,13 @@ class Batch(models.Model):
 
     name = models.CharField(max_length=255)
     sequence = models.ForeignKey(
-        Sequence, on_delete=models.CASCADE, related_name="batches"
+        Sequence,
+        on_delete=models.CASCADE,
+        related_name="batches",
+        null=True,
+        blank=True,
     )
     reply_to_email = models.EmailField(blank=True)
-    enquiry_date_from = models.DateField(null=True, blank=True)
-    enquiry_date_to = models.DateField(null=True, blank=True)
     # created_by = models.ForeignKey('accounts.User', on_delete=models.SET_NULL, null=True)
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.ACTIVE

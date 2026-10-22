@@ -12,7 +12,7 @@ from django.core.mail import EmailMultiAlternatives
 from django.db import transaction
 from django.utils import timezone
 
-from campaigns.models import Batch, BatchLead, Channel, EmailLog
+from campaigns.models import Batch, BatchLead, Channel, EmailLog, MessageTemplate
 from campaigns.unsubscribe import (
     get_unsubscribe_url,
     is_email_suppressed,
@@ -70,6 +70,8 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--batch-id", type=int)
         parser.add_argument("--batch-lead-id", type=int)
+        parser.add_argument("--template-id", type=int)
+        parser.add_argument("--enquiry-date")
         parser.add_argument(
             "--force",
             action="store_true",
@@ -82,7 +84,17 @@ class Command(BaseCommand):
         now = timezone.now()
         batch_id = kwargs.get("batch_id")
         batch_lead_id = kwargs.get("batch_lead_id")
+        template_id = kwargs.get("template_id")
+        enquiry_date = kwargs.get("enquiry_date")
         force = kwargs.get("force", False)
+        template_override = (
+            MessageTemplate.objects.filter(pk=template_id, channel=Channel.EMAIL).first()
+            if template_id is not None
+            else None
+        )
+        if template_id is not None and template_override is None:
+            self.stdout.write(self.style.ERROR(f"Email template {template_id} does not exist."))
+            return
 
         # Get active batches
         active_batches = Batch.objects.filter(
@@ -154,6 +166,8 @@ class Command(BaseCommand):
             )
             if batch_lead_id is not None:
                 batch_leads = batch_leads.filter(pk=batch_lead_id)
+            if enquiry_date is not None:
+                batch_leads = batch_leads.filter(lead__enquiry_date=enquiry_date)
 
             if not batch_leads.exists():
                 logger.warning(
@@ -340,7 +354,7 @@ class Command(BaseCommand):
                     # GET TEMPLATE
                     # --------------------------------
 
-                    template = step.template
+                    template = template_override or step.template
 
                     # --------------------------------
                     # LEAD DATA

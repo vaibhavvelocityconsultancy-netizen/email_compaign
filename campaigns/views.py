@@ -100,6 +100,32 @@ from campaigns.unsubscribe import (
 
 logger = logging.getLogger(__name__)
 
+
+def _parse_import_date(value):
+    value = (value or "").strip()
+    if not value:
+        return None
+
+    parsed = parse_date(value)
+    if parsed is not None:
+        return parsed.isoformat()
+
+    for date_format in ("%d-%m-%Y", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(value, date_format).date().isoformat()
+        except ValueError:
+            continue
+    return value
+
+
+def _spreadsheet_cell_value(value):
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value or "")
+
+
 # ------------------------------------- masters ----------------------
 
 
@@ -451,26 +477,82 @@ class LeadCSVImportView(APIView):
 
         if not csv_file:
             return Response(
-                {"error": "CSV file is required."}, status=status.HTTP_400_BAD_REQUEST
+                {"error": "A CSV or Excel file is required."}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        if not csv_file.name.lower().endswith(".csv"):
+        extension = csv_file.name.lower().rsplit(".", 1)[-1]
+        if extension not in {"csv", "xls", "xlsx"}:
             return Response(
-                {"error": "Only CSV files are allowed."},
+                {"error": "Only CSV, XLS, or XLSX files are allowed."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
-            decoded_file = csv_file.read().decode("utf-8-sig").splitlines()
-            reader = csv.DictReader(decoded_file)
+            if extension == "csv":
+                decoded_file = csv_file.read().decode("utf-8-sig").splitlines()
+                reader = csv.DictReader(decoded_file)
+                rows = (
+                    {
+                        (key or "").strip().lower(): (value or "")
+                        for key, value in row.items()
+                    }
+                    for row in reader
+                )
+            elif extension == "xlsx":
+                from openpyxl import load_workbook
+
+                workbook = load_workbook(csv_file, read_only=True, data_only=True)
+                sheet = workbook.active
+                values = sheet.iter_rows(values_only=True)
+                headers = [str(value or "").strip().lower() for value in next(values, ())]
+                rows = (
+                    {
+                        header: _spreadsheet_cell_value(value)
+                        for header, value in zip(headers, row)
+                        if header
+                    }
+                    for row in values
+                    if any(value is not None for value in row)
+                )
+            else:
+                import xlrd
+
+                workbook = xlrd.open_workbook(file_contents=csv_file.read())
+                sheet = workbook.sheet_by_index(0)
+                headers = [str(value or "").strip().lower() for value in sheet.row_values(0)]
+
+                def xls_rows():
+                    for row_index in range(1, sheet.nrows):
+                        row = {}
+                        for column_index, header in enumerate(headers):
+                            if not header:
+                                continue
+                            cell = sheet.cell(row_index, column_index)
+                            if cell.ctype == xlrd.XL_CELL_DATE:
+                                value = xlrd.xldate_as_datetime(
+                                    cell.value, workbook.datemode
+                                ).date().isoformat()
+                            else:
+                                value = _spreadsheet_cell_value(cell.value)
+                            row[header] = value
+                        yield row
+
+                rows = xls_rows()
 
             total_rows = 0
             imported = 0
             duplicates = 0
             invalid = 0
+            row_errors = []
+            valid_sources = {value for value, _label in Lead.SOURCE_CHOICES}
+            valid_statuses = {value for value, _label in Lead.STATUS_CHOICES}
 
-            for row in reader:
+            for row in rows:
                 total_rows += 1
+                source = (row.get("source") or "").strip().upper()
+                source = source if source in valid_sources else "OTHER"
+                lead_status = (row.get("status") or "").strip().upper()
+                lead_status = lead_status if lead_status in valid_statuses else "OTHER"
                 data = {
                     "company_name": (row.get("company_name") or "").strip(),
                     "company_address": (row.get("company_address") or "").strip(),
@@ -486,10 +568,10 @@ class LeadCSVImportView(APIView):
                     "contact_mobile": (row.get("contact_mobile") or "").strip(),
                     "contact_email": (row.get("contact_email") or "").strip(),
                     "enquiry_for": (row.get("enquiry_for") or "LEAD").strip().upper(),
-                    "enquiry_date": (row.get("enquiry_date") or "").strip() or None,
-                    "source": (row.get("source") or "OTHER").strip().upper(),
-                    "status": (row.get("status") or "NEW").strip().upper(),
-                    "followup_date": (row.get("followup_date") or "").strip() or None,
+                    "enquiry_date": _parse_import_date(row.get("enquiry_date")),
+                    "source": source,
+                    "status": lead_status,
+                    "followup_date": _parse_import_date(row.get("followup_date")),
                     "followup_remarks": (row.get("followup_remarks") or "").strip(),
                     "is_opportunity": (row.get("is_opportunity") or "").strip().lower()
                     in {"1", "true", "yes", "y"},
@@ -497,17 +579,21 @@ class LeadCSVImportView(APIView):
                 serializer = LeadSerializer(data=data)
                 if not serializer.is_valid():
                     invalid += 1
+                    row_errors.append(
+                        {"row": total_rows + 1, "errors": serializer.errors}
+                    )
                     continue
                 serializer.save()
                 imported += 1
 
             return Response(
                 {
-                    "message": "CSV imported successfully.",
+                    "message": "Leads imported successfully.",
                     "total_rows": total_rows,
                     "imported": imported,
                     "duplicates": duplicates,
                     "invalid": invalid,
+                    "row_errors": row_errors,
                 },
                 status=status.HTTP_201_CREATED,
             )
@@ -515,6 +601,11 @@ class LeadCSVImportView(APIView):
         except UnicodeDecodeError:
             return Response(
                 {"error": "CSV must be UTF-8 encoded."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except (ValueError, IndexError, KeyError) as exc:
+            return Response(
+                {"error": f"The uploaded spreadsheet could not be read: {exc}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -1350,6 +1441,12 @@ class BatchViewSet(viewsets.ModelViewSet):
                 batch.status,
             )
             return None
+        if not batch.sequence_id:
+            logger.info(
+                "Skipping immediate processing for batch %s: no sequence is assigned.",
+                batch.pk,
+            )
+            return None
         if batch.sequence.channel != Channel.EMAIL:
             logger.info(
                 "Skipping immediate processing for batch %s: channel is %s.",
@@ -1407,20 +1504,51 @@ class BatchViewSet(viewsets.ModelViewSet):
         serializer = BatchLeadSerializer(leads, many=True)
         return Response(serializer.data)
 
-    def _send_now(self, batch, batch_lead=None):
+    def _send_now(self, batch, template_id=None, enquiry_date=None, batch_lead=None):
         if batch.status != Batch.Status.ACTIVE:
             return Response(
                 {"detail": "Resume this campaign before sending email."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if batch.sequence.channel != Channel.EMAIL:
+        if batch.sequence_id and batch.sequence.channel != Channel.EMAIL:
             return Response(
                 {"detail": "Send now is only available for email campaigns."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        template = None
+        if template_id is not None:
+            template = get_object_or_404(MessageTemplate, pk=template_id)
+            if template.channel != Channel.EMAIL:
+                return Response(
+                    {"detail": "Choose an email template."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        if not batch.sequence_id:
+            if template is None:
+                return Response(
+                    {"detail": "Choose an email template before sending."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            sequence = Sequence.objects.create(
+                name=f"{batch.name} - One-time email",
+                channel=Channel.EMAIL,
+            )
+            SequenceStep.objects.create(
+                sequence=sequence,
+                step_number=1,
+                template=template,
+            )
+            batch.sequence = sequence
+            batch.save(update_fields=["sequence"])
+
         output = StringIO()
         command_options = {"batch_id": batch.pk, "force": True, "stdout": output}
+        if template is not None:
+            command_options["template_id"] = template.pk
+        if enquiry_date:
+            command_options["enquiry_date"] = enquiry_date.isoformat()
         if batch_lead is not None:
             command_options["batch_lead_id"] = batch_lead.pk
         call_command("process_email_campaign", **command_options)
@@ -1441,7 +1569,40 @@ class BatchViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="send-now")
     def send_now(self, request, pk=None):
-        return self._send_now(self.get_object())
+        batch = self.get_object()
+        template_id = request.data.get("template")
+        if not template_id and not batch.sequence_id:
+            return Response(
+                {"detail": "Choose an email template before sending."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if template_id:
+            try:
+                template_id = int(template_id)
+            except (TypeError, ValueError):
+                return Response(
+                    {"template": "Choose a valid email template."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        enquiry_date_value = request.data.get("enquiry_date")
+        enquiry_date = None
+        if enquiry_date_value:
+            if not isinstance(enquiry_date_value, str):
+                return Response(
+                    {"enquiry_date": "Enter a valid date."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            enquiry_date = parse_date(enquiry_date_value)
+            if enquiry_date is None:
+                return Response(
+                    {"enquiry_date": "Enter a valid date."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        return self._send_now(
+            batch,
+            template_id=template_id,
+            enquiry_date=enquiry_date,
+        )
 
     @action(
         detail=True,
@@ -1452,7 +1613,7 @@ class BatchViewSet(viewsets.ModelViewSet):
     def send_lead_now(self, request, pk=None, lead_id=None):
         batch = self.get_object()
         batch_lead = get_object_or_404(batch.batch_leads, lead_id=lead_id)
-        return self._send_now(batch, batch_lead)
+        return self._send_now(batch, batch_lead=batch_lead)
 
     @action(detail=True, methods=["patch"], url_path="pause", url_name="pause")
     def pause_batch(self, request, pk=None):
