@@ -75,6 +75,7 @@ from .models import (
     Company,
     CompanyContact,
     Country,
+    EmailSuppression,
     MessageLog,
     Opportunity,
     OpportunityModule,
@@ -463,19 +464,6 @@ class LeadCSVImportView(APIView):
             decoded_file = csv_file.read().decode("utf-8-sig").splitlines()
             reader = csv.DictReader(decoded_file)
 
-            csv_columns = set(reader.fieldnames or [])
-            required_columns = {"company_name", "enquiry_for", "enquiry_date", "source"}
-            missing_columns = required_columns - csv_columns
-
-            if missing_columns:
-                return Response(
-                    {
-                        "error": "Missing required columns.",
-                        "missing_columns": list(missing_columns),
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
             total_rows = 0
             imported = 0
             duplicates = 0
@@ -497,9 +485,9 @@ class LeadCSVImportView(APIView):
                     ).strip(),
                     "contact_mobile": (row.get("contact_mobile") or "").strip(),
                     "contact_email": (row.get("contact_email") or "").strip(),
-                    "enquiry_for": (row.get("enquiry_for") or "").strip().upper(),
-                    "enquiry_date": (row.get("enquiry_date") or "").strip(),
-                    "source": (row.get("source") or "").strip().upper(),
+                    "enquiry_for": (row.get("enquiry_for") or "LEAD").strip().upper(),
+                    "enquiry_date": (row.get("enquiry_date") or "").strip() or None,
+                    "source": (row.get("source") or "OTHER").strip().upper(),
                     "status": (row.get("status") or "NEW").strip().upper(),
                     "followup_date": (row.get("followup_date") or "").strip() or None,
                     "followup_remarks": (row.get("followup_remarks") or "").strip(),
@@ -554,7 +542,14 @@ class LeadListView(APIView):
             .select_related("company", "contact")
             .order_by("-enquiry_date", "-created_at")
         )
-        serializer = LeadSerializer(leads, many=True)
+        suppressed_emails = set(
+            EmailSuppression.objects.values_list("email", flat=True)
+        )
+        serializer = LeadSerializer(
+            leads,
+            many=True,
+            context={"suppressed_emails": suppressed_emails},
+        )
 
         return Response(
             {"count": leads.count(), "results": serializer.data},
@@ -1266,9 +1261,19 @@ def get_order_dashboard(request):
 
 class EmailLogListView(APIView):
     def get(self, request):
-        logs = MessageLog.objects.select_related("batch_lead", "template").order_by(
-            "-sent_at"
-        )
+        logs = MessageLog.objects.filter(channel=Channel.EMAIL).select_related(
+            "batch_lead", "template"
+        ).order_by("-sent_at")
+        limit = request.query_params.get("limit")
+        if limit is not None:
+            try:
+                limit = min(max(int(limit), 1), 100)
+            except ValueError:
+                return Response(
+                    {"detail": "limit must be a positive integer."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            logs = logs[:limit]
         serializer = MessageLogSerializer(logs, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 

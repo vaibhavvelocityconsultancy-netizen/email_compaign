@@ -455,13 +455,6 @@ class Command(BaseCommand):
                             )
 
                     unsubscribe_url = get_unsubscribe_url(batch_lead)
-                    body += (
-                        '<p style="margin-top:24px;font-size:12px;color:#666;">'
-                        "Don't want to receive these emails? "
-                        f'<a href="{escape(unsubscribe_url, quote=True)}">'
-                        "Unsubscribe</a></p>"
-                    )
-
                     # --------------------------------
                     # CREATE EMAIL
                     # --------------------------------
