@@ -1,6 +1,9 @@
+import hashlib
+
 from django.core.exceptions import ValidationError
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 # Create your models here.
@@ -370,6 +373,43 @@ class MessageLog(models.Model):
 
     def __str__(self):
         return f"{self.to_address} - Step {self.step_number} - {self.status}"
+
+
+class InboundReply(models.Model):
+    batch_lead = models.ForeignKey(
+        BatchLead,
+        on_delete=models.SET_NULL,
+        related_name="inbound_replies",
+        null=True,
+        blank=True,
+    )
+    sender_email = models.EmailField(db_index=True)
+    recipient_email = models.EmailField(blank=True)
+    subject = models.CharField(max_length=998, blank=True)
+    body_plain = models.TextField(blank=True)
+    body_html = models.TextField(blank=True)
+    message_id = models.CharField(max_length=998, null=True, blank=True)
+    message_id_hash = models.CharField(
+        max_length=64, unique=True, null=True, blank=True, editable=False
+    )
+    received_at = models.DateTimeField(default=timezone.now, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-received_at", "-id"]
+
+    @staticmethod
+    def message_id_digest(message_id):
+        return hashlib.sha256(message_id.encode("utf-8")).hexdigest()
+
+    def save(self, *args, **kwargs):
+        self.message_id_hash = (
+            self.message_id_digest(self.message_id) if self.message_id else None
+        )
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.sender_email} - {self.subject}"
 
 
 EmailLog = MessageLog

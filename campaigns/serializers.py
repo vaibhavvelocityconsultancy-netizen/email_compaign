@@ -10,6 +10,7 @@ from .models import (
     CompanyContact,
     Country,
     EmailSuppression,
+    InboundReply,
     MessageLog,
     MessageTemplate,
     Opportunity,
@@ -633,6 +634,45 @@ class MessageLogSerializer(serializers.ModelSerializer):
             "template_name",
             "error",
         ]
+
+
+class InboundReplySerializer(serializers.ModelSerializer):
+    lead = serializers.SerializerMethodField()
+    campaign = serializers.SerializerMethodField()
+
+    class Meta:
+        model = InboundReply
+        fields = [
+            "id",
+            "batch_lead",
+            "sender_email",
+            "recipient_email",
+            "subject",
+            "body_plain",
+            "body_html",
+            "message_id",
+            "received_at",
+            "created_at",
+            "lead",
+            "campaign",
+        ]
+        read_only_fields = fields
+
+    def get_lead(self, reply):
+        if reply.batch_lead_id is None:
+            return None
+        lead = reply.batch_lead.lead
+        return {
+            "id": lead.pk,
+            "name": lead.name,
+            "email": reply.batch_lead.email or lead.email,
+        }
+
+    def get_campaign(self, reply):
+        if reply.batch_lead_id is None:
+            return None
+        batch = reply.batch_lead.batch
+        return {"id": batch.pk, "name": batch.name}
 
 # ----------- email & whatsapp compaign ends -----
 
