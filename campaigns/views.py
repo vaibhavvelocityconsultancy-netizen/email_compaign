@@ -64,6 +64,7 @@ from campaigns.serializers import (
     QuotationSerializer,
     SalesOrderSerializer,
     FinalOfferUpdateSerializer,
+    InboundReplySerializer,
     TaskSerializer,
 )
 
@@ -76,6 +77,7 @@ from .models import (
     CompanyContact,
     Country,
     EmailSuppression,
+    InboundReply,
     MessageLog,
     Opportunity,
     OpportunityModule,
@@ -1378,6 +1380,45 @@ class EmailLogListView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+class InboundReplyListView(APIView):
+    def get(self, request):
+        replies = InboundReply.objects.select_related(
+            "batch_lead__lead", "batch_lead__batch"
+        ).all()
+
+        for parameter, lookup in (
+            ("lead", "batch_lead__lead_id"),
+            ("batch", "batch_lead__batch_id"),
+        ):
+            value = request.query_params.get(parameter)
+            if value is None:
+                continue
+            try:
+                identifier = int(value)
+                if identifier < 1:
+                    raise ValueError
+            except ValueError:
+                return Response(
+                    {"detail": f"{parameter} must be a positive integer."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            replies = replies.filter(**{lookup: identifier})
+
+        serializer = InboundReplySerializer(replies, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class InboundReplyDetailView(APIView):
+    def get(self, request, pk):
+        reply = get_object_or_404(
+            InboundReply.objects.select_related(
+                "batch_lead__lead", "batch_lead__batch"
+            ),
+            pk=pk,
+        )
+        return Response(InboundReplySerializer(reply).data, status=status.HTTP_200_OK)
+
+
 class EmailTemplateViewSet(viewsets.ModelViewSet):
     queryset = MessageTemplate.objects.all()
     serializer_class = MessageTemplateSerializer
@@ -1840,16 +1881,35 @@ def mailgun_inbound_webhook(request):
 
     try:
         sender = request.POST.get("sender", "").strip().lower()
+        recipient = request.POST.get("recipient", "").strip().lower()
         subject = request.POST.get("subject", "")
-        body = request.POST.get("body-plain", "")
-
-        print("Mailgun Reply Received")
-        print("Sender:", sender)
-        print("Subject:", subject)
-        print("Body:", body)
+        body_plain = request.POST.get("body-plain", "")
+        body_html = request.POST.get("body-html", "")
+        message_id = (
+            request.POST.get("Message-Id")
+            or request.POST.get("message-id")
+            or ""
+        ).strip() or None
 
         # Find the lead who replied
         batch_lead = BatchLead.objects.filter(email__iexact=sender).first()
+
+        reply_values = {
+            "batch_lead": batch_lead,
+            "sender_email": sender,
+            "recipient_email": recipient,
+            "subject": subject,
+            "body_plain": body_plain,
+            "body_html": body_html,
+            "received_at": timezone.now(),
+        }
+        if message_id:
+            InboundReply.objects.get_or_create(
+                message_id_hash=InboundReply.message_id_digest(message_id),
+                defaults={**reply_values, "message_id": message_id},
+            )
+        else:
+            InboundReply.objects.create(**reply_values)
 
         if not batch_lead:
             return JsonResponse(
@@ -1891,8 +1951,15 @@ def mailgun_inbound_webhook(request):
             }
         )
 
-    except Exception as e:
-        return JsonResponse({"status": "error", "error": str(e)}, status=400)
+    except Exception:
+        logger.exception("Mailgun inbound webhook processing failed.")
+        return JsonResponse(
+            {
+                "status": "error",
+                "error": "Mailgun inbound webhook processing failed.",
+            },
+            status=500,
+        )
 
 
 @csrf_exempt

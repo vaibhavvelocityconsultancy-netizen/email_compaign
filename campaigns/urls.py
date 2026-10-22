@@ -17,6 +17,8 @@ from .views import (
     LeadDetailView,
     LeadListView,
     LeadOptionsView,
+    InboundReplyDetailView,
+    InboundReplyListView,
     create_sales_order_from_quotation,
     lead_convert_to_opportunity,
     OpportunityDetailView,
@@ -166,6 +168,16 @@ urlpatterns = [
         "email-logs/",
         EmailLogListView.as_view(),
         name="email-log-list",
+    ),
+    path(
+        "inbound-replies/",
+        InboundReplyListView.as_view(),
+        name="inbound-reply-list",
+    ),
+    path(
+        "inbound-replies/<int:pk>/",
+        InboundReplyDetailView.as_view(),
+        name="inbound-reply-detail",
     ),
       path(
           "email/unsubscribe/<str:token>/",
