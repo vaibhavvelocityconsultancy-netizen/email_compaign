@@ -183,6 +183,17 @@ class Command(BaseCommand):
 
                 step = None
                 try:
+                    if not batch_lead.email:
+                        current_email = (
+                            batch_lead.lead.contact.email
+                            if batch_lead.lead.contact
+                            else ""
+                        ) or batch_lead.lead.email
+                        current_email = (current_email or "").strip()
+                        if current_email:
+                            batch_lead.email = current_email
+                            batch_lead.save(update_fields=["email"])
+
                     if batch_lead.replied:
                         logger.info(
                             "SKIP batch %s lead %s: recipient has replied.",
