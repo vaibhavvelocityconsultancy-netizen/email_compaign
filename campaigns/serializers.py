@@ -111,7 +111,10 @@ class CompanyContactSerializer(serializers.ModelSerializer):
 
 # ------------------- Lead Serializer -------------------
 class LeadSerializer(serializers.ModelSerializer):
-    company_name = serializers.CharField(write_only=True, max_length=200)
+    unsubscribed = serializers.SerializerMethodField()
+    company_name = serializers.CharField(
+        write_only=True, required=False, allow_blank=True, max_length=200
+    )
     company_address = serializers.CharField(
         write_only=True, required=False, allow_blank=True
     )
@@ -147,6 +150,7 @@ class LeadSerializer(serializers.ModelSerializer):
         model = Lead
         fields = [
             "sr_no",
+            "unsubscribed",
             "company",
             "contact",
             "company_name",
@@ -175,6 +179,7 @@ class LeadSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "sr_no",
+            "unsubscribed",
             "company",
             "contact",
             "tracker",
@@ -204,6 +209,20 @@ class LeadSerializer(serializers.ModelSerializer):
             }
         )
         return data
+
+    def get_unsubscribed(self, instance):
+        email = (
+            (instance.contact.email if instance.contact else "")
+            or instance.email
+            or ""
+        ).strip().lower()
+        if not email:
+            return False
+
+        suppressed_emails = self.context.get("suppressed_emails")
+        if suppressed_emails is not None:
+            return email in suppressed_emails
+        return EmailSuppression.objects.filter(email__iexact=email).exists()
 
     @staticmethod
     def _resolve_master(model_class, value, **filters):
@@ -242,26 +261,35 @@ class LeadSerializer(serializers.ModelSerializer):
 
     @classmethod
     def _save_company(cls, validated_data, instance=None):
-        company_name = validated_data.pop("company_name")
+        company_name = validated_data.pop("company_name", "").strip()
+        company_address = validated_data.pop("company_address", "")
+        company_pincode = validated_data.pop("company_pincode", "")
+        company_gst_number = validated_data.pop("company_gst_number", "")
+        company_country = validated_data.pop("company_country", "India")
+        company_state = validated_data.pop("company_state", "")
+        company_city = validated_data.pop("company_city", "")
+        if not company_name:
+            return None
+
         company_data = {
             "name": company_name,
-            "address": validated_data.pop("company_address", ""),
-            "pincode": validated_data.pop("company_pincode", ""),
-            "gst_number": validated_data.pop("company_gst_number", ""),
+            "address": company_address,
+            "pincode": company_pincode,
+            "gst_number": company_gst_number,
         }
 
         country = cls._resolve_master(
             Country,
-            validated_data.pop("company_country", "India"),
+            company_country,
         )
         state = cls._resolve_master(
             State,
-            validated_data.pop("company_state", ""),
+            company_state,
             country=country,
         )
         city = cls._resolve_master(
             City,
-            validated_data.pop("company_city", ""),
+            company_city,
             state=state,
         )
 
@@ -295,7 +323,7 @@ class LeadSerializer(serializers.ModelSerializer):
         designation = validated_data.pop("contact_designation", "")
         phone = validated_data.pop("contact_mobile", "")
         email = validated_data.pop("contact_email", "")
-        if not contact_name:
+        if not company or not contact_name:
             return None
 
         contact = (
