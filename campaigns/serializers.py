@@ -204,8 +204,8 @@ class LeadSerializer(serializers.ModelSerializer):
                 "company_gst_number": company.gst_number if company else "",
                 "contact_name": contact.name if contact else "",
                 "contact_designation": contact.designation if contact else "",
-                "contact_mobile": contact.phone if contact else "",
-                "contact_email": contact.email if contact else "",
+                "contact_mobile": contact.phone if contact else instance.phone,
+                "contact_email": contact.email if contact else instance.email or "",
             }
         )
         return data
@@ -351,8 +351,13 @@ class LeadSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
+        contact_email = validated_data.get("contact_email", "")
+        contact_mobile = validated_data.get("contact_mobile", "")
         company = self._save_company(validated_data)
         contact = self._save_contact(validated_data, company)
+        if contact is None:
+            validated_data["email"] = contact_email or None
+            validated_data["phone"] = contact_mobile
         lead = Lead.objects.create(company=company, contact=contact, **validated_data)
         self._sync_opportunity(lead)
         return lead
