@@ -166,9 +166,6 @@ class Command(BaseCommand):
             )
             if batch_lead_id is not None:
                 batch_leads = batch_leads.filter(pk=batch_lead_id)
-            if enquiry_date is not None:
-                batch_leads = batch_leads.filter(lead__enquiry_date=enquiry_date)
-
             if not batch_leads.exists():
                 logger.warning(
                     "Batch %s (%s) has no recipient records to process.",
@@ -365,6 +362,9 @@ class Command(BaseCommand):
                     company_name = lead.company.name if lead.company else ""
                     contact_name = lead.contact.name if lead.contact else ""
                     enquiry_for = lead.get_enquiry_for_display()
+                    lead_enquiry_date = enquiry_date or (
+                        lead.enquiry_date.isoformat() if lead.enquiry_date else ""
+                    )
 
                     # --------------------------------
                     # REPLACE PLACEHOLDERS
@@ -391,6 +391,10 @@ class Command(BaseCommand):
                         "{{enquiry_for}}",
                         enquiry_for
                     )
+                    subject = subject.replace(
+                        "{{enquiry_date}}",
+                        lead_enquiry_date
+                    )
 
                     body = template.body
 
@@ -412,6 +416,10 @@ class Command(BaseCommand):
                     body = body.replace(
                         "{{enquiry_for}}",
                         enquiry_for
+                    )
+                    body = body.replace(
+                        "{{enquiry_date}}",
+                        lead_enquiry_date
                     )
 
                     body = body.replace(
