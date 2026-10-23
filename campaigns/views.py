@@ -594,7 +594,7 @@ class LeadCSVImportView(APIView):
                     in {"1", "true", "yes", "y"},
                 }
                 contact_email = data["contact_email"]
-                if contact_email and Lead.objects.filter(
+                if contact_email and Lead.objects.filter(is_active=True).filter(
                     Q(contact__email__iexact=contact_email)
                     | Q(email__iexact=contact_email)
                 ).exists():
@@ -688,7 +688,7 @@ class LeadSampleDataView(APIView):
         existing = 0
         for lead_data in self.sample_leads:
             contact_email = lead_data["contact_email"]
-            if Lead.objects.filter(
+            if Lead.objects.filter(is_active=True).filter(
                 Q(contact__email__iexact=contact_email)
                 | Q(email__iexact=contact_email)
             ).exists():
@@ -759,11 +759,6 @@ class LeadListView(APIView):
 class LeadDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Lead.objects.filter(is_active=True).select_related("company", "contact")
     serializer_class = LeadSerializer
-
-    def perform_destroy(self, instance):
-        instance.is_active = False
-        instance.save(update_fields=["is_active", "updated_at"])
-
 
 class OpportunityListCreateView(generics.ListCreateAPIView):
     queryset = Opportunity.objects.filter(is_active=True).prefetch_related("modules")
