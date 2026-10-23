@@ -18,7 +18,7 @@ from campaigns.unsubscribe import (
     is_email_suppressed,
 )
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("email_campaign")
 
 
 def save_to_sent(msg):
@@ -146,9 +146,8 @@ class Command(BaseCommand):
 
             if not steps:
                 logger.warning(
-                    "Skipping batch %s (%s): sequence %s has no steps.",
+                    "event=campaign.skipped campaign_id=%s reason=sequence_has_no_steps sequence_id=%s",
                     batch.pk,
-                    batch.name,
                     batch.sequence_id,
                 )
                 self.stdout.write(
@@ -168,9 +167,8 @@ class Command(BaseCommand):
                 batch_leads = batch_leads.filter(pk=batch_lead_id)
             if not batch_leads.exists():
                 logger.warning(
-                    "Batch %s (%s) has no recipient records to process.",
+                    "event=campaign.skipped campaign_id=%s reason=no_recipient_records",
                     batch.pk,
-                    batch.name,
                 )
                 self.stdout.write(
                     self.style.WARNING(
@@ -239,10 +237,9 @@ class Command(BaseCommand):
                                 update_fields=["unsubscribed", "unsubscribed_at"]
                             )
                         logger.warning(
-                            "SKIP batch %s lead %s (%s): recipient is suppressed.",
+                            "event=email_send.skipped campaign_id=%s lead_id=%s reason=suppressed",
                             batch.pk,
                             batch_lead.lead_id,
-                            batch_lead.email,
                         )
                         self.stdout.write(
                             self.style.WARNING(
@@ -255,10 +252,9 @@ class Command(BaseCommand):
                     current_step = batch_lead.current_step
                     if current_step < 0:
                         logger.warning(
-                            "SKIP batch %s lead %s (%s): current_step %s is invalid.",
+                            "event=email_send.skipped campaign_id=%s lead_id=%s reason=invalid_step current_step=%s",
                             batch.pk,
                             batch_lead.lead_id,
-                            batch_lead.email,
                             current_step,
                         )
                         continue
@@ -292,11 +288,9 @@ class Command(BaseCommand):
                         # Step 0 should only be sent once
                         if batch_lead.last_email_sent_at:
                             logger.warning(
-                                "SKIP batch %s lead %s (%s): first step already has "
-                                "a sent timestamp while current_step is 0.",
+                                "event=email_send.skipped campaign_id=%s lead_id=%s reason=first_step_already_sent",
                                 batch.pk,
                                 batch_lead.lead_id,
-                                batch_lead.email,
                             )
                             self.stdout.write(
                                 f"SKIP {batch_lead.email} - "
@@ -315,11 +309,9 @@ class Command(BaseCommand):
                         # Follow-up requires previous email
                         if not batch_lead.last_email_sent_at:
                             logger.warning(
-                                "SKIP batch %s lead %s (%s): current_step is %s but "
-                                "there is no previous email timestamp.",
+                                "event=email_send.skipped campaign_id=%s lead_id=%s reason=missing_previous_sent_at current_step=%s",
                                 batch.pk,
                                 batch_lead.lead_id,
-                                batch_lead.email,
                                 current_step,
                             )
                             self.stdout.write(
@@ -340,14 +332,11 @@ class Command(BaseCommand):
                     # Not time yet
                     if send_after > now and not force:
                         logger.info(
-                            "SKIP batch %s lead %s (%s): step %s is due at %s "
-                            "(now %s).",
+                            "event=email_send.skipped campaign_id=%s lead_id=%s reason=not_due step=%s due_at=%s",
                             batch.pk,
                             batch_lead.lead_id,
-                            batch_lead.email,
                             step.step_number,
                             send_after,
-                            now,
                         )
                         self.stdout.write(
                             f"SKIP {batch_lead.email} - "
@@ -633,19 +622,17 @@ class Command(BaseCommand):
                         )
                     )
                     logger.info(
-                        "Sent batch %s lead %s (%s), step %s.",
+                        "event=email_send.sent campaign_id=%s lead_id=%s step=%s",
                         batch.pk,
                         batch_lead.lead_id,
-                        batch_lead.email,
                         step.step_number,
                     )
 
                 except Exception as e:
                     logger.exception(
-                        "Failed sending batch %s lead %s (%s), step %s.",
+                        "event=email_send.failed campaign_id=%s lead_id=%s step=%s",
                         batch.pk,
                         batch_lead.lead_id,
-                        batch_lead.email,
                         step.step_number if step else "unknown",
                     )
 

@@ -3,29 +3,82 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Email preferences</title>
+    <meta name="robots" content="noindex, nofollow">
+    <title>Unsubscribe from emails</title>
     <style>
-      body { background: #f5f7fa; color: #202a35; font: 16px Arial, sans-serif; margin: 0; }
-      main { background: #fff; border-radius: 12px; margin: 10vh auto; max-width: 480px; padding: 32px; }
-      button { background: #1f5eff; border: 0; border-radius: 6px; color: #fff; cursor: pointer; font: inherit; padding: 12px 18px; }
+      :root { --brand: #1f5eff; --brand-dark: #1747c7; --text: #202a35; --muted: #667085; --border: #e4e7ec; }
+      * { box-sizing: border-box; }
+      body { background: #f5f7fa; color: var(--text); font: 16px/1.5 Arial, Helvetica, sans-serif; margin: 0; padding: 16px; }
+      main { background: #fff; border-radius: 12px; box-shadow: 0 4px 24px rgba(16, 24, 40, .08); margin: 8vh auto 0; max-width: 480px; padding: 32px; }
+      .brand { color: var(--brand); font-size: 18px; font-weight: bold; margin-bottom: 20px; }
+      h1 { font-size: 24px; line-height: 1.3; margin: 0 0 12px; }
+      p { margin: 0 0 16px; }
+      .muted { color: var(--muted); font-size: 14px; }
+      .email { background: #f5f7fa; border-radius: 6px; display: inline-block; font-weight: bold; padding: 4px 10px; }
+      .icon { font-size: 40px; line-height: 1; margin-bottom: 12px; }
+      fieldset { border: 0; margin: 20px 0; padding: 0; }
+      legend { font-weight: bold; margin-bottom: 8px; padding: 0; }
+      label { align-items: center; cursor: pointer; display: flex; gap: 10px; padding: 6px 0; }
+      textarea { border: 1px solid var(--border); border-radius: 6px; font: inherit; margin-top: 6px; min-height: 70px; padding: 10px; width: 100%; }
+      .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+      button { background: var(--brand); border: 0; border-radius: 6px; color: #fff; cursor: pointer; font: inherit; font-weight: bold; padding: 12px 20px; }
+      button:hover { background: var(--brand-dark); }
+      .link { align-self: center; color: var(--muted); font-size: 14px; }
+      footer { border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; margin-top: 28px; padding-top: 16px; }
+      footer a { color: var(--brand); }
     </style>
   </head>
   <body>
     <main>
-      <h1>Email subscription</h1>
+      <div class="brand">{{ company_name|default:"Your Company" }}</div>
+
       {% if completed %}
-        <p>You have been unsubscribed from marketing emails.</p>
-        {% if mailgun_sync_failed %}
-          <p>Your request is saved and this system will stop future campaign emails. Mailgun could not confirm the suppression update; please contact support if you continue receiving messages.</p>
-        {% endif %}
+        <div class="icon">✅</div>
+        <h1>You're unsubscribed</h1>
+        <p>You won't receive marketing emails from us anymore.</p>
+        <p class="muted">Please allow up to 24 hours for this to fully take effect.</p>
+        {# Mailgun sync errors are logged on the server. The visitor does not need to see them. #}
+
       {% elif already_unsubscribed %}
-        <p>This email address is already unsubscribed from marketing emails.</p>
+        <div class="icon">✅</div>
+        <h1>Already unsubscribed</h1>
+        <p>
+          {% if masked_email %}<span class="email">{{ masked_email }}</span> is{% else %}This email address is{% endif %}
+          already unsubscribed from our marketing emails.
+        </p>
+        <p class="muted">You don't need to do anything else.</p>
+
       {% else %}
-        <p>Confirm that you no longer want to receive marketing emails.</p>
+        <h1>Unsubscribe from emails</h1>
+        <p>
+          Sorry to see you go.
+          {% if masked_email %}Confirm below and we'll stop sending marketing emails to <span class="email">{{ masked_email }}</span>.
+          {% else %}Confirm below and we'll stop sending you marketing emails.{% endif %}
+        </p>
+
         <form method="post">
-          <button type="submit">Unsubscribe</button>
+          {% csrf_token %}
+          <fieldset>
+            <legend>Why are you leaving? <span class="muted">(optional)</span></legend>
+            <label><input type="radio" name="reason" value="too_many"> Too many emails</label>
+            <label><input type="radio" name="reason" value="not_relevant"> Not relevant to me</label>
+            <label><input type="radio" name="reason" value="never_signed_up"> I didn't sign up for this</label>
+            <label><input type="radio" name="reason" value="other"> Other</label>
+            <textarea name="comment" placeholder="Anything else you'd like to tell us? (optional)" maxlength="500"></textarea>
+          </fieldset>
+
+          <div class="actions">
+            <button type="submit">Yes, unsubscribe me</button>
+            <a class="link" href="javascript:window.close();">No, keep me subscribed</a>
+          </div>
         </form>
       {% endif %}
+
+      <footer>
+        Need help? Contact us at
+        <a href="mailto:{{ support_email|default:'support@yourcompany.com' }}">{{ support_email|default:"support@yourcompany.com" }}</a><br>
+        © {% now "Y" %} {{ company_name|default:"Your Company" }}{% if company_address %}, {{ company_address }}{% endif %}
+      </footer>
     </main>
   </body>
 </html>
