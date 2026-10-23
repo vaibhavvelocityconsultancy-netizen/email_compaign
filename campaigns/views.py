@@ -593,6 +593,13 @@ class LeadCSVImportView(APIView):
                     "is_opportunity": (row.get("is_opportunity") or "").strip().lower()
                     in {"1", "true", "yes", "y"},
                 }
+                contact_email = data["contact_email"]
+                if contact_email and Lead.objects.filter(
+                    Q(contact__email__iexact=contact_email)
+                    | Q(email__iexact=contact_email)
+                ).exists():
+                    duplicates += 1
+                    continue
                 serializer = LeadSerializer(data=data)
                 if not serializer.is_valid():
                     invalid += 1
@@ -625,6 +632,84 @@ class LeadCSVImportView(APIView):
                 {"error": f"The uploaded spreadsheet could not be read: {exc}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+
+class LeadSampleDataView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    sample_leads = (
+        {
+            "company_name": "Sample Company One",
+            "company_address": "123 Example Road",
+            "company_city": "Mumbai",
+            "company_state": "Maharashtra",
+            "company_pincode": "400001",
+            "company_country": "India",
+            "contact_name": "Aarav Mehta",
+            "contact_designation": "Purchase Manager",
+            "contact_email": "aarav.mehta@example.com",
+            "enquiry_date": "2026-01-15",
+            "source": "WEBSITE",
+            "status": "NEW",
+        },
+        {
+            "company_name": "Sample Company Two",
+            "company_address": "45 Demo Street",
+            "company_city": "Pune",
+            "company_state": "Maharashtra",
+            "company_pincode": "411001",
+            "company_country": "India",
+            "contact_name": "Diya Sharma",
+            "contact_designation": "Operations Manager",
+            "contact_email": "diya.sharma@example.com",
+            "enquiry_date": "2026-02-10",
+            "source": "OTHER",
+            "status": "NEW",
+        },
+        {
+            "company_name": "Sample Company Three",
+            "company_address": "8 Test Industrial Estate",
+            "company_city": "Ahmedabad",
+            "company_state": "Gujarat",
+            "company_pincode": "380001",
+            "company_country": "India",
+            "contact_name": "Kabir Patel",
+            "contact_designation": "Business Owner",
+            "contact_email": "kabir.patel@example.com",
+            "enquiry_date": "2026-03-05",
+            "source": "REFERENCE",
+            "status": "NEW",
+        },
+    )
+
+    @transaction.atomic
+    def post(self, request):
+        created = 0
+        existing = 0
+        for lead_data in self.sample_leads:
+            contact_email = lead_data["contact_email"]
+            if Lead.objects.filter(
+                Q(contact__email__iexact=contact_email)
+                | Q(email__iexact=contact_email)
+            ).exists():
+                existing += 1
+                continue
+
+            serializer = LeadSerializer(data=lead_data)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            created += 1
+
+        email_campaign_logger.info(
+            "event=lead.sample_data_created actor_id=%s created=%s existing=%s",
+            _campaign_actor_id(request),
+            created,
+            existing,
+        )
+        return Response(
+            {"created": created, "existing": existing},
+            status=status.HTTP_200_OK,
+        )
 
 
 class LeadOptionsView(APIView):

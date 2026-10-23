@@ -17,6 +17,7 @@ from .views import (
     LeadDetailView,
     LeadListView,
     LeadOptionsView,
+    LeadSampleDataView,
     InboundReplyDetailView,
     InboundReplyListView,
     create_sales_order_from_quotation,
@@ -77,6 +78,11 @@ urlpatterns = [
         "leads/import-csv/",
         LeadCSVImportView.as_view(),
         name="lead-csv-import",
+    ),
+    path(
+        "leads/sample-data/",
+        LeadSampleDataView.as_view(),
+        name="lead-sample-data",
     ),
     path(
         "leads/",
