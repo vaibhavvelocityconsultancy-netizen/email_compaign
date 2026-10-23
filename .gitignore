@@ -12,4 +12,6 @@ db.sqlite3
 
 media/
 staticfiles/
-*.log
+config/settings.py
+# logs/
+# *.log

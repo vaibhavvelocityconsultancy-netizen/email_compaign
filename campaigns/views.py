@@ -101,6 +101,12 @@ from campaigns.unsubscribe import (
 
 
 logger = logging.getLogger(__name__)
+email_campaign_logger = logging.getLogger("email_campaign")
+
+
+def _campaign_actor_id(request):
+    user = getattr(request, "user", None)
+    return user.pk if user is not None and user.is_authenticated else "anonymous"
 
 
 def _parse_import_date(value):
@@ -1424,9 +1430,30 @@ class EmailTemplateViewSet(viewsets.ModelViewSet):
     serializer_class = MessageTemplateSerializer
 
     def perform_create(self, serializer):
-        serializer.save()
+        template = serializer.save()
+        email_campaign_logger.info(
+            "event=template.created actor_id=%s template_id=%s",
+            _campaign_actor_id(self.request),
+            template.pk,
+        )
 
-    #  logger.info(f"Email template '{serializer.instance.name}' created by user '{self.request.user.username}'.")
+    def perform_update(self, serializer):
+        template = serializer.save()
+        email_campaign_logger.info(
+            "event=template.updated actor_id=%s template_id=%s fields=%s",
+            _campaign_actor_id(self.request),
+            template.pk,
+            ",".join(sorted(serializer.validated_data)),
+        )
+
+    def perform_destroy(self, instance):
+        template_id = instance.pk
+        super().perform_destroy(instance)
+        email_campaign_logger.info(
+            "event=template.deleted actor_id=%s template_id=%s",
+            _campaign_actor_id(self.request),
+            template_id,
+        )
 
 
 class EmailSequenceViewSet(viewsets.ModelViewSet):
@@ -1434,8 +1461,30 @@ class EmailSequenceViewSet(viewsets.ModelViewSet):
     serializer_class = SequenceSerializer
 
     def perform_create(self, serializer):
-        serializer.save()
-        # logger.info(f"Email sequence '{serializer.instance.name}' created by user '{self.request.user.username}'.")
+        sequence = serializer.save()
+        email_campaign_logger.info(
+            "event=sequence.created actor_id=%s sequence_id=%s",
+            _campaign_actor_id(self.request),
+            sequence.pk,
+        )
+
+    def perform_update(self, serializer):
+        sequence = serializer.save()
+        email_campaign_logger.info(
+            "event=sequence.updated actor_id=%s sequence_id=%s fields=%s",
+            _campaign_actor_id(self.request),
+            sequence.pk,
+            ",".join(sorted(serializer.validated_data)),
+        )
+
+    def perform_destroy(self, instance):
+        sequence_id = instance.pk
+        super().perform_destroy(instance)
+        email_campaign_logger.info(
+            "event=sequence.deleted actor_id=%s sequence_id=%s",
+            _campaign_actor_id(self.request),
+            sequence_id,
+        )
 
 
 class EmailSequenceStepViewSet(viewsets.ModelViewSet):
@@ -1443,8 +1492,34 @@ class EmailSequenceStepViewSet(viewsets.ModelViewSet):
     serializer_class = SequenceStepSerializer
 
     def perform_create(self, serializer):
-        serializer.save()
-        # logger.info(f"Email sequence step '{serializer.instance.step_number}' for sequence '{serializer.instance.sequence.name}' created by user '{self.request.user.username}'.")
+        step = serializer.save()
+        email_campaign_logger.info(
+            "event=sequence_step.created actor_id=%s sequence_id=%s step_id=%s step_number=%s",
+            _campaign_actor_id(self.request),
+            step.sequence_id,
+            step.pk,
+            step.step_number,
+        )
+
+    def perform_update(self, serializer):
+        step = serializer.save()
+        email_campaign_logger.info(
+            "event=sequence_step.updated actor_id=%s sequence_id=%s step_id=%s",
+            _campaign_actor_id(self.request),
+            step.sequence_id,
+            step.pk,
+        )
+
+    def perform_destroy(self, instance):
+        sequence_id = instance.sequence_id
+        step_id = instance.pk
+        super().perform_destroy(instance)
+        email_campaign_logger.info(
+            "event=sequence_step.deleted actor_id=%s sequence_id=%s step_id=%s",
+            _campaign_actor_id(self.request),
+            sequence_id,
+            step_id,
+        )
 
 
 class BatchViewSet(viewsets.ModelViewSet):
@@ -1453,6 +1528,12 @@ class BatchViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         batch = serializer.save()
+        email_campaign_logger.info(
+            "event=campaign.created actor_id=%s campaign_id=%s recipient_count=%s",
+            _campaign_actor_id(self.request),
+            batch.pk,
+            batch.batch_leads.count(),
+        )
         self._automatic_email_result = None
         transaction.on_commit(
             lambda batch_id=batch.pk: setattr(
@@ -1460,6 +1541,24 @@ class BatchViewSet(viewsets.ModelViewSet):
                 "_automatic_email_result",
                 self._process_immediate_email_campaign(batch_id),
             )
+        )
+
+    def perform_update(self, serializer):
+        batch = serializer.save()
+        email_campaign_logger.info(
+            "event=campaign.updated actor_id=%s campaign_id=%s fields=%s",
+            _campaign_actor_id(self.request),
+            batch.pk,
+            ",".join(sorted(serializer.validated_data)),
+        )
+
+    def perform_destroy(self, instance):
+        campaign_id = instance.pk
+        super().perform_destroy(instance)
+        email_campaign_logger.info(
+            "event=campaign.deleted actor_id=%s campaign_id=%s",
+            _campaign_actor_id(self.request),
+            campaign_id,
         )
 
     def create(self, request, *args, **kwargs):
@@ -1531,6 +1630,10 @@ class BatchViewSet(viewsets.ModelViewSet):
                 stdout=output,
             )
         except Exception:
+            email_campaign_logger.exception(
+                "event=automatic_email_processing.failed campaign_id=%s",
+                batch.pk,
+            )
             logger.exception(
                 "Immediate email campaign processing failed for batch %s.",
                 batch.pk,
@@ -1601,11 +1704,28 @@ class BatchViewSet(viewsets.ModelViewSet):
             command_options["enquiry_date"] = enquiry_date.isoformat()
         if batch_lead is not None:
             command_options["batch_lead_id"] = batch_lead.pk
-        call_command("process_email_campaign", **command_options)
+        try:
+            call_command("process_email_campaign", **command_options)
+        except Exception:
+            email_campaign_logger.exception(
+                "event=email_send.failed actor_id=%s campaign_id=%s lead_id=%s",
+                _campaign_actor_id(self.request),
+                batch.pk,
+                batch_lead.lead_id if batch_lead else "all",
+            )
+            raise
 
         result = output.getvalue()
         sent_count = result.count("Sent to ")
         failed_count = result.count("Failed ")
+        email_campaign_logger.info(
+            "event=email_send.completed actor_id=%s campaign_id=%s lead_id=%s sent=%s failed=%s",
+            _campaign_actor_id(self.request),
+            batch.pk,
+            batch_lead.lead_id if batch_lead else "all",
+            sent_count,
+            failed_count,
+        )
         if not sent_count:
             detail = result.strip() or "No eligible email was sent."
             return Response(
@@ -1670,6 +1790,11 @@ class BatchViewSet(viewsets.ModelViewSet):
         batch = self.get_object()
         batch.status = Batch.Status.PAUSED
         batch.save()
+        email_campaign_logger.info(
+            "event=campaign.paused actor_id=%s campaign_id=%s",
+            _campaign_actor_id(request),
+            batch.pk,
+        )
         return Response({"status": "Batch paused."}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["patch"], url_path="resume")
@@ -1677,6 +1802,11 @@ class BatchViewSet(viewsets.ModelViewSet):
         batch = self.get_object()
         batch.status = Batch.Status.ACTIVE
         batch.save(update_fields=["status"])
+        email_campaign_logger.info(
+            "event=campaign.resumed actor_id=%s campaign_id=%s",
+            _campaign_actor_id(request),
+            batch.pk,
+        )
         automatic_email_result = []
         transaction.on_commit(
             lambda batch_id=batch.pk: automatic_email_result.append(
@@ -1717,10 +1847,20 @@ def campaign_unsubscribe(request, token):
         )
 
     record_unsubscribe(batch_lead.email)
+    email_campaign_logger.info(
+        "event=recipient.unsubscribed campaign_id=%s batch_lead_id=%s",
+        batch_lead.batch_id,
+        batch_lead.pk,
+    )
     mailgun_sync_failed = False
     try:
         sync_mailgun_suppression(batch_lead.email)
     except (ImproperlyConfigured, requests.RequestException):
+        email_campaign_logger.exception(
+            "event=mailgun_suppression_sync.failed batch_id=%s batch_lead_id=%s",
+            batch_lead.batch_id,
+            batch_lead.pk,
+        )
         logger.exception("Could not sync an unsubscribe to Mailgun.")
         mailgun_sync_failed = True
 
@@ -1763,6 +1903,9 @@ def mailgun_webhook(request):
     try:
         data = json.loads(request.body)
         if not _is_valid_mailgun_signature(data.get("signature", {})):
+            email_campaign_logger.warning(
+                "event=mailgun_webhook.rejected reason=invalid_signature"
+            )
             return JsonResponse({"error": "Webhook signature is invalid."}, status=403)
 
         event_data = data.get("event-data", {})
@@ -1823,11 +1966,18 @@ def mailgun_webhook(request):
 
         if not email_log:
             if event == "unsubscribed":
+                email_campaign_logger.info(
+                    "event=mailgun_status.received event_type=%s status=suppressed",
+                    event,
+                )
                 return JsonResponse(
                     {"status": "suppressed", "event": event}
                 )
 
-            logger.warning("MessageLog not found for Mailgun recipient %s", recipient)
+            email_campaign_logger.warning(
+                "event=mailgun_status.unmatched event_type=%s",
+                event,
+            )
             return JsonResponse(
                 {"status": "not_found", "event": event, "recipient": recipient}
             )
@@ -1835,6 +1985,12 @@ def mailgun_webhook(request):
         # Update status
         email_log.status = new_status
         email_log.save(update_fields=["status"])
+        email_campaign_logger.info(
+            "event=mailgun_status.updated message_log_id=%s event_type=%s status=%s",
+            email_log.pk,
+            event,
+            new_status,
+        )
 
         print(f"MessageLog {email_log.id} updated: " f"{recipient} → {new_status}")
 
@@ -1850,12 +2006,14 @@ def mailgun_webhook(request):
         )
 
     except json.JSONDecodeError:
+        email_campaign_logger.warning("event=mailgun_webhook.rejected reason=invalid_json")
         return JsonResponse(
             {"status": "error", "error": "Invalid JSON payload"}, status=400
         )
 
     except Exception as e:
         logger.exception("Mailgun webhook failed.")
+        email_campaign_logger.exception("event=mailgun_webhook.failed")
 
         return JsonResponse(
             {
@@ -1877,6 +2035,9 @@ def mailgun_inbound_webhook(request):
         "signature": request.POST.get("signature", ""),
     }
     if not _is_valid_mailgun_signature(signature_data):
+        email_campaign_logger.warning(
+            "event=mailgun_inbound_webhook.rejected reason=invalid_signature"
+        )
         return JsonResponse({"error": "Webhook signature is invalid."}, status=403)
 
     try:
@@ -1912,6 +2073,7 @@ def mailgun_inbound_webhook(request):
             InboundReply.objects.create(**reply_values)
 
         if not batch_lead:
+            email_campaign_logger.info("event=reply.received matched=false")
             return JsonResponse(
                 {
                     "status": "ignored",
@@ -1941,6 +2103,12 @@ def mailgun_inbound_webhook(request):
             latest_log.status = MessageLog.Status.REPLIED
             latest_log.save(update_fields=["status"])
 
+        email_campaign_logger.info(
+            "event=reply.received matched=true batch_id=%s batch_lead_id=%s message_log_id=%s",
+            batch_lead.batch_id,
+            batch_lead.pk,
+            latest_log.pk if latest_log else "none",
+        )
         return JsonResponse(
             {
                 "status": "updated",
@@ -1953,6 +2121,7 @@ def mailgun_inbound_webhook(request):
 
     except Exception:
         logger.exception("Mailgun inbound webhook processing failed.")
+        email_campaign_logger.exception("event=mailgun_inbound_webhook.failed")
         return JsonResponse(
             {
                 "status": "error",
