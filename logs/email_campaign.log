@@ -1,3 +1,986 @@
+[2026-10-23 18:28:49,047] WARNING event=api.request method=GET endpoint=api/batches/$ actor_id=unknown status=401 duration_ms=0.55
+[2026-10-23 18:28:49,003] WARNING event=api.request method=GET endpoint=api/email-templates/$ actor_id=unknown status=401 duration_ms=0.52
+[2026-10-23 18:28:48,032] WARNING event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=unknown status=401 duration_ms=0.55
+[2026-10-23 18:28:48,016] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=29.53
+[2026-10-23 18:28:48,016] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=37.54
+[2026-10-23 18:28:48,016] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=25.93
+[2026-10-23 18:28:48,015] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=33.07
+[2026-10-23 18:28:48,014] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=28.62
+[2026-10-23 18:28:48,002] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=18.50
+[2026-10-23 18:28:47,922] WARNING event=api.request method=GET endpoint=api/email-templates/$ actor_id=unknown status=401 duration_ms=0.86
+[2026-10-23 18:28:47,911] WARNING event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=unknown status=401 duration_ms=16.11
+[2026-10-23 18:28:47,910] WARNING event=api.request method=GET endpoint=api/email-sequences/$ actor_id=unknown status=401 duration_ms=17.54
+[2026-10-23 18:28:47,909] WARNING event=api.request method=GET endpoint=api/email-logs/ actor_id=unknown status=401 duration_ms=18.09
+[2026-10-23 18:28:47,909] WARNING event=api.request method=GET endpoint=api/email-logs/ actor_id=unknown status=401 duration_ms=18.61
+[2026-10-23 18:28:47,908] WARNING event=api.request method=GET endpoint=api/batches/$ actor_id=unknown status=401 duration_ms=19.10
+[2026-10-23 18:28:47,907] WARNING event=api.request method=GET endpoint=api/leads/ actor_id=unknown status=401 duration_ms=24.87
+[2026-10-23 18:18:22,304] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.18
+[2026-10-23 18:18:22,294] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=6.82
+[2026-10-23 18:18:22,277] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=19.75
+[2026-10-23 18:18:22,275] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=26.01
+[2026-10-23 18:18:22,274] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=13.95
+[2026-10-23 18:18:22,274] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=19.12
+[2026-10-23 18:18:22,270] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=19.57
+[2026-10-23 18:18:22,266] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=27.44
+[2026-10-23 18:17:24,195] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=7.55
+[2026-10-23 18:17:24,183] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=7.45
+[2026-10-23 18:17:24,169] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=28.45
+[2026-10-23 18:17:24,168] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=22.72
+[2026-10-23 18:17:24,166] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=26.80
+[2026-10-23 18:17:24,165] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=17.61
+[2026-10-23 18:17:24,162] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=29.49
+[2026-10-23 18:17:24,162] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=18.17
+[2026-10-23 18:17:18,300] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=8.22
+[2026-10-23 18:17:18,291] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=7.23
+[2026-10-23 18:17:18,273] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=13.88
+[2026-10-23 18:17:18,271] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=17.88
+[2026-10-23 18:17:18,269] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=22.26
+[2026-10-23 18:17:18,265] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=25.83
+[2026-10-23 18:17:18,265] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=20.45
+[2026-10-23 18:17:18,260] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=28.46
+[2026-10-23 18:07:25,586] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=7.94
+[2026-10-23 18:07:25,580] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=7.73
+[2026-10-23 18:07:25,565] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=19.21
+[2026-10-23 18:07:25,565] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=17.41
+[2026-10-23 18:07:25,563] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=19.37
+[2026-10-23 18:07:25,561] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=20.17
+[2026-10-23 18:07:25,559] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=19.33
+[2026-10-23 18:07:25,556] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=25.12
+[2026-10-23 18:07:23,199] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.12
+[2026-10-23 18:07:23,186] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=7.35
+[2026-10-23 18:07:23,180] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=55.61
+[2026-10-23 18:07:23,177] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=32.79
+[2026-10-23 18:07:23,173] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=30.28
+[2026-10-23 18:07:23,173] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=39.21
+[2026-10-23 18:07:23,172] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=30.73
+[2026-10-23 18:07:23,170] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=24.85
+[2026-10-23 17:57:42,126] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=8.27
+[2026-10-23 17:57:42,106] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=7.43
+[2026-10-23 17:57:42,105] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=80.95
+[2026-10-23 17:57:42,103] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=37.61
+[2026-10-23 17:57:42,098] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=33.42
+[2026-10-23 17:57:42,097] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=67.26
+[2026-10-23 17:57:42,097] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=31.71
+[2026-10-23 17:57:42,092] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=24.81
+[2026-10-23 17:54:44,217] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=4.91
+[2026-10-23 17:54:44,216] INFO event=reply.received matched=true batch_id=1 batch_lead_id=1 message_log_id=1
+[2026-10-23 17:54:44,209] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=2.92
+[2026-10-23 17:54:44,208] INFO event=reply.received matched=false
+[2026-10-23 17:54:44,202] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=3.65
+[2026-10-23 17:54:44,201] INFO event=reply.received matched=true batch_id=1 batch_lead_id=1 message_log_id=1
+[2026-10-23 17:54:44,197] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=3.92
+[2026-10-23 17:54:44,196] INFO event=reply.received matched=true batch_id=1 batch_lead_id=1 message_log_id=1
+[2026-10-23 17:54:44,189] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/ actor_id=unknown status=200 duration_ms=2.25
+[2026-10-23 17:54:44,188] INFO event=mailgun_status.ignored message_log_id=1 event_type=delivered reason=already_replied
+[2026-10-23 17:54:44,183] WARNING event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=403 duration_ms=1.50
+[2026-10-23 17:54:44,182] WARNING event=mailgun_inbound_webhook.rejected reason=invalid_signature
+[2026-10-23 17:54:44,177] WARNING event=api.request method=GET endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=405 duration_ms=0.19
+[2026-10-23 17:54:44,174] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=4.53
+[2026-10-23 17:54:44,173] INFO event=reply.received matched=true batch_id=1 batch_lead_id=1 message_log_id=1
+[2026-10-23 17:54:44,168] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=5.53
+[2026-10-23 17:54:44,167] INFO event=reply.received matched=true batch_id=1 batch_lead_id=1 message_log_id=1
+[2026-10-23 17:54:44,159] WARNING event=api.request method=GET endpoint=api/inbound-replies/ actor_id=unknown status=401 duration_ms=0.38
+[2026-10-23 17:54:43,702] WARNING event=api.request method=GET endpoint=api/inbound-replies/ actor_id=1 status=400 duration_ms=0.35
+[2026-10-23 17:54:43,700] INFO event=api.request method=GET endpoint=api/inbound-replies/ actor_id=1 status=200 duration_ms=2.47
+[2026-10-23 17:54:43,696] INFO event=api.request method=GET endpoint=api/inbound-replies/ actor_id=1 status=200 duration_ms=2.93
+[2026-10-23 17:54:43,229] INFO event=api.request method=GET endpoint=api/inbound-replies/<int:pk>/ actor_id=1 status=200 duration_ms=2.99
+[2026-10-23 17:54:43,224] INFO event=api.request method=GET endpoint=api/inbound-replies/ actor_id=1 status=200 duration_ms=5.06
+[2026-10-23 17:54:28,980] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=8.71
+[2026-10-23 17:54:28,973] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=7.00
+[2026-10-23 17:54:28,953] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=19.19
+[2026-10-23 17:54:28,952] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=23.26
+[2026-10-23 17:54:28,948] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=25.66
+[2026-10-23 17:54:28,946] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=25.08
+[2026-10-23 17:54:28,943] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=24.41
+[2026-10-23 17:54:28,942] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=32.58
+[2026-10-23 17:54:19,979] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=6.80
+[2026-10-23 17:54:19,958] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=30.50
+[2026-10-23 17:54:19,956] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=19.95
+[2026-10-23 17:54:19,954] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=23.30
+[2026-10-23 17:54:19,948] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=23.81
+[2026-10-23 17:54:19,946] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=14.50
+[2026-10-23 17:54:19,945] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=10.91
+[2026-10-23 17:54:18,769] INFO event=api.request method=GET endpoint=api/inbound-replies/ actor_id=1 status=200 duration_ms=10.12
+[2026-10-23 17:54:18,534] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=7.22
+[2026-10-23 17:54:16,173] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=10.92
+[2026-10-23 17:54:16,162] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=8.96
+[2026-10-23 17:54:16,134] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=41.79
+[2026-10-23 17:54:16,130] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=29.46
+[2026-10-23 17:54:16,126] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=22.94
+[2026-10-23 17:54:16,122] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=27.89
+[2026-10-23 17:54:16,116] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=20.06
+[2026-10-23 17:54:16,114] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=15.28
+[2026-10-23 17:54:15,187] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=4.72
+[2026-10-23 17:54:15,185] INFO event=reply.received matched=true batch_id=1 batch_lead_id=1 message_log_id=1
+[2026-10-23 17:54:15,178] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=3.03
+[2026-10-23 17:54:15,177] INFO event=reply.received matched=false
+[2026-10-23 17:54:15,171] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=3.80
+[2026-10-23 17:54:15,170] INFO event=reply.received matched=true batch_id=1 batch_lead_id=1 message_log_id=1
+[2026-10-23 17:54:15,165] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=4.43
+[2026-10-23 17:54:15,164] INFO event=reply.received matched=true batch_id=1 batch_lead_id=1 message_log_id=1
+[2026-10-23 17:54:15,157] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/ actor_id=unknown status=200 duration_ms=2.88
+[2026-10-23 17:54:15,156] INFO event=mailgun_status.ignored message_log_id=1 event_type=delivered reason=already_replied
+[2026-10-23 17:54:15,149] WARNING event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=403 duration_ms=2.30
+[2026-10-23 17:54:15,146] WARNING event=mailgun_inbound_webhook.rejected reason=invalid_signature
+[2026-10-23 17:54:15,140] WARNING event=api.request method=GET endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=405 duration_ms=0.31
+[2026-10-23 17:54:15,135] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=4.87
+[2026-10-23 17:54:15,134] INFO event=reply.received matched=true batch_id=1 batch_lead_id=1 message_log_id=1
+[2026-10-23 17:54:15,128] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=7.88
+[2026-10-23 17:54:15,127] INFO event=reply.received matched=true batch_id=1 batch_lead_id=1 message_log_id=1
+[2026-10-23 17:54:15,116] WARNING event=api.request method=GET endpoint=api/inbound-replies/ actor_id=unknown status=401 duration_ms=0.67
+[2026-10-23 17:54:14,640] WARNING event=api.request method=GET endpoint=api/inbound-replies/ actor_id=1 status=400 duration_ms=0.35
+[2026-10-23 17:54:14,639] INFO event=api.request method=GET endpoint=api/inbound-replies/ actor_id=1 status=200 duration_ms=2.33
+[2026-10-23 17:54:14,635] INFO event=api.request method=GET endpoint=api/inbound-replies/ actor_id=1 status=200 duration_ms=3.60
+[2026-10-23 17:54:14,108] INFO event=api.request method=GET endpoint=api/inbound-replies/<int:pk>/ actor_id=1 status=200 duration_ms=2.76
+[2026-10-23 17:54:14,104] INFO event=api.request method=GET endpoint=api/inbound-replies/ actor_id=1 status=200 duration_ms=5.48
+[2026-10-23 17:54:00,220] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=8.92
+[2026-10-23 17:54:00,196] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=12.99
+[2026-10-23 17:54:00,186] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=119.65
+[2026-10-23 17:54:00,181] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=112.99
+[2026-10-23 17:54:00,179] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=111.03
+[2026-10-23 17:54:00,177] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=112.76
+[2026-10-23 17:54:00,176] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=107.44
+[2026-10-23 17:54:00,107] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=39.79
+[2026-10-23 17:51:36,581] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=4.26
+[2026-10-23 17:51:36,580] INFO event=reply.received matched=true batch_id=1 batch_lead_id=1 message_log_id=1
+[2026-10-23 17:51:36,573] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=3.46
+[2026-10-23 17:51:36,572] INFO event=reply.received matched=false
+[2026-10-23 17:51:36,566] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=3.54
+[2026-10-23 17:51:36,565] INFO event=reply.received matched=true batch_id=1 batch_lead_id=1 message_log_id=1
+[2026-10-23 17:51:36,561] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=3.51
+[2026-10-23 17:51:36,560] INFO event=reply.received matched=true batch_id=1 batch_lead_id=1 message_log_id=1
+[2026-10-23 17:51:36,554] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/ actor_id=unknown status=200 duration_ms=2.17
+[2026-10-23 17:51:36,552] INFO event=mailgun_status.ignored message_log_id=1 event_type=delivered reason=already_replied
+[2026-10-23 17:51:36,548] WARNING event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=403 duration_ms=1.32
+[2026-10-23 17:51:36,547] WARNING event=mailgun_inbound_webhook.rejected reason=invalid_signature
+[2026-10-23 17:51:36,543] WARNING event=api.request method=GET endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=405 duration_ms=0.19
+[2026-10-23 17:51:36,539] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=3.83
+[2026-10-23 17:51:36,538] INFO event=reply.received matched=true batch_id=1 batch_lead_id=1 message_log_id=1
+[2026-10-23 17:51:36,534] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=4.41
+[2026-10-23 17:51:36,533] INFO event=reply.received matched=true batch_id=1 batch_lead_id=1 message_log_id=1
+[2026-10-23 17:51:36,525] WARNING event=api.request method=GET endpoint=api/inbound-replies/ actor_id=unknown status=401 duration_ms=0.40
+[2026-10-23 17:51:36,039] WARNING event=api.request method=GET endpoint=api/inbound-replies/ actor_id=1 status=400 duration_ms=0.38
+[2026-10-23 17:51:36,038] INFO event=api.request method=GET endpoint=api/inbound-replies/ actor_id=1 status=200 duration_ms=2.71
+[2026-10-23 17:51:36,033] INFO event=api.request method=GET endpoint=api/inbound-replies/ actor_id=1 status=200 duration_ms=3.61
+[2026-10-23 17:51:35,548] INFO event=api.request method=GET endpoint=api/inbound-replies/<int:pk>/ actor_id=1 status=200 duration_ms=1.70
+[2026-10-23 17:51:35,545] INFO event=api.request method=GET endpoint=api/inbound-replies/ actor_id=1 status=200 duration_ms=5.03
+[2026-10-23 17:50:57,463] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.30
+[2026-10-23 17:50:57,459] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=9.20
+[2026-10-23 17:50:57,434] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=25.08
+[2026-10-23 17:50:57,433] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=21.14
+[2026-10-23 17:50:57,428] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=29.97
+[2026-10-23 17:50:57,427] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=23.75
+[2026-10-23 17:50:57,421] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=20.76
+[2026-10-23 17:50:57,420] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=28.79
+[2026-10-23 17:50:38,464] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=4.10
+[2026-10-23 17:50:38,463] INFO event=reply.received matched=true batch_id=1 batch_lead_id=1 message_log_id=1
+[2026-10-23 17:50:38,456] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=4.37
+[2026-10-23 17:50:38,455] INFO event=reply.received matched=false
+[2026-10-23 17:50:38,446] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=3.50
+[2026-10-23 17:50:38,445] INFO event=reply.received matched=true batch_id=1 batch_lead_id=1 message_log_id=1
+[2026-10-23 17:50:38,442] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=3.78
+[2026-10-23 17:50:38,441] INFO event=reply.received matched=true batch_id=1 batch_lead_id=1 message_log_id=1
+[2026-10-23 17:50:38,432] WARNING event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=403 duration_ms=1.56
+[2026-10-23 17:50:38,431] WARNING event=mailgun_inbound_webhook.rejected reason=invalid_signature
+[2026-10-23 17:50:38,426] WARNING event=api.request method=GET endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=405 duration_ms=0.22
+[2026-10-23 17:50:38,422] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=5.23
+[2026-10-23 17:50:38,421] INFO event=reply.received matched=true batch_id=1 batch_lead_id=1 message_log_id=1
+[2026-10-23 17:50:38,415] INFO event=api.request method=POST endpoint=api/webhooks/mailgun/inbound/ actor_id=unknown status=200 duration_ms=4.67
+[2026-10-23 17:50:38,414] INFO event=reply.received matched=true batch_id=1 batch_lead_id=1 message_log_id=1
+[2026-10-23 17:50:38,407] WARNING event=api.request method=GET endpoint=api/inbound-replies/ actor_id=unknown status=401 duration_ms=0.41
+[2026-10-23 17:50:38,096] WARNING event=api.request method=GET endpoint=api/inbound-replies/ actor_id=unknown status=401 duration_ms=0.69
+[2026-10-23 17:50:37,881] WARNING event=api.request method=GET endpoint=api/inbound-replies/ actor_id=1 status=400 duration_ms=0.61
+[2026-10-23 17:50:37,879] INFO event=api.request method=GET endpoint=api/inbound-replies/ actor_id=1 status=200 duration_ms=2.80
+[2026-10-23 17:50:37,874] INFO event=api.request method=GET endpoint=api/inbound-replies/ actor_id=1 status=200 duration_ms=2.92
+[2026-10-23 17:50:37,669] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.48
+[2026-10-23 17:50:37,613] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=36.04
+[2026-10-23 17:50:37,612] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=30.57
+[2026-10-23 17:50:37,606] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=19.21
+[2026-10-23 17:50:37,599] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=14.57
+[2026-10-23 17:50:37,595] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=16.25
+[2026-10-23 17:50:37,589] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=20.01
+[2026-10-23 17:50:37,205] INFO event=api.request method=GET endpoint=api/inbound-replies/<int:pk>/ actor_id=1 status=200 duration_ms=1.71
+[2026-10-23 17:50:37,202] INFO event=api.request method=GET endpoint=api/inbound-replies/ actor_id=1 status=200 duration_ms=10.91
+[2026-10-23 17:50:36,697] INFO event=api.request method=GET endpoint=api/inbound-replies/ actor_id=1 status=200 duration_ms=10.70
+[2026-10-23 17:50:35,294] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=7.75
+[2026-10-23 17:50:35,229] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=41.18
+[2026-10-23 17:50:35,222] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=19.41
+[2026-10-23 17:50:35,221] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=21.27
+[2026-10-23 17:50:35,213] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=23.18
+[2026-10-23 17:50:35,211] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=18.00
+[2026-10-23 17:50:35,206] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=21.71
+[2026-10-23 17:50:34,555] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=15.15
+[2026-10-23 17:50:32,189] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=14.36
+[2026-10-23 17:50:32,167] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=31.25
+[2026-10-23 17:50:32,164] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=17.05
+[2026-10-23 17:50:32,154] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=12.65
+[2026-10-23 17:50:32,118] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=24.86
+[2026-10-23 16:30:48,434] WARNING event=api.request method=GET endpoint=api/email-templates/$ actor_id=unknown status=401 duration_ms=0.83
+[2026-10-23 16:30:48,431] WARNING event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=unknown status=401 duration_ms=0.96
+[2026-10-23 16:30:48,429] WARNING event=api.request method=GET endpoint=api/batches/$ actor_id=unknown status=401 duration_ms=0.76
+[2026-10-23 16:30:48,427] WARNING event=api.request method=GET endpoint=api/email-logs/ actor_id=unknown status=401 duration_ms=0.59
+[2026-10-23 16:30:48,425] WARNING event=api.request method=GET endpoint=api/email-sequences/$ actor_id=unknown status=401 duration_ms=0.94
+[2026-10-23 16:30:48,423] WARNING event=api.request method=GET endpoint=api/email-logs/ actor_id=unknown status=401 duration_ms=1.06
+[2026-10-23 16:30:48,416] WARNING event=api.request method=GET endpoint=api/leads/ actor_id=unknown status=401 duration_ms=0.53
+[2026-10-23 16:27:32,134] WARNING event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=unknown status=401 duration_ms=0.70
+[2026-10-23 16:27:32,128] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=15.53
+[2026-10-23 16:27:32,126] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=21.22
+[2026-10-23 16:27:32,120] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=10.81
+[2026-10-23 16:27:32,054] WARNING event=api.request method=GET endpoint=api/email-templates/$ actor_id=unknown status=401 duration_ms=1.32
+[2026-10-23 16:27:32,050] WARNING event=api.request method=GET endpoint=api/email-logs/ actor_id=unknown status=401 duration_ms=1.23
+[2026-10-23 16:27:32,048] WARNING event=api.request method=GET endpoint=api/email-sequences/$ actor_id=unknown status=401 duration_ms=1.32
+[2026-10-23 16:27:32,046] WARNING event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=unknown status=401 duration_ms=1.29
+[2026-10-23 16:27:32,044] WARNING event=api.request method=GET endpoint=api/email-logs/ actor_id=unknown status=401 duration_ms=2.34
+[2026-10-23 16:27:32,037] WARNING event=api.request method=GET endpoint=api/batches/$ actor_id=unknown status=401 duration_ms=1.25
+[2026-10-23 16:27:32,031] WARNING event=api.request method=GET endpoint=api/leads/ actor_id=unknown status=401 duration_ms=2.09
+[2026-10-23 16:19:03,634] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=5.96
+[2026-10-23 16:18:48,607] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=6.09
+[2026-10-23 16:18:33,587] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=5.79
+[2026-10-23 16:18:23,251] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=6.05
+[2026-10-23 16:18:18,566] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=10.80
+[2026-10-23 16:18:03,525] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=16.79
+[2026-10-23 16:17:48,488] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=5.66
+[2026-10-23 16:17:33,470] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=8.19
+[2026-10-23 16:17:23,286] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=6.18
+[2026-10-23 16:17:23,261] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=28.08
+[2026-10-23 16:17:23,260] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=18.19
+[2026-10-23 16:17:23,254] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=15.98
+[2026-10-23 16:17:23,251] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=16.39
+[2026-10-23 16:17:23,247] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=10.14
+[2026-10-23 16:17:23,241] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=11.06
+[2026-10-23 16:17:18,441] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=7.18
+[2026-10-23 16:17:18,292] INFO event=api.request method=GET endpoint=api/inbound-replies/ actor_id=1 status=200 duration_ms=12.20
+[2026-10-23 16:17:03,426] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=6.52
+[2026-10-23 16:16:48,423] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=8.00
+[2026-10-23 16:16:48,419] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=8.38
+[2026-10-23 16:16:48,404] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=16.70
+[2026-10-23 16:16:48,404] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=13.21
+[2026-10-23 16:16:48,399] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=16.43
+[2026-10-23 16:16:48,398] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=17.37
+[2026-10-23 16:16:48,396] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=18.04
+[2026-10-23 16:16:48,392] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=26.48
+[2026-10-23 16:11:11,566] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=7.79
+[2026-10-23 16:11:11,557] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=8.77
+[2026-10-23 16:11:11,544] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=14.64
+[2026-10-23 16:11:11,544] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=17.48
+[2026-10-23 16:11:11,539] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=22.04
+[2026-10-23 16:11:11,537] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=22.17
+[2026-10-23 16:11:11,537] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=16.35
+[2026-10-23 16:11:11,532] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=25.30
+[2026-10-23 16:09:42,224] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=8.58
+[2026-10-23 16:09:42,221] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=8.36
+[2026-10-23 16:09:42,200] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=25.36
+[2026-10-23 16:09:42,199] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=21.35
+[2026-10-23 16:09:42,195] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=34.10
+[2026-10-23 16:09:42,193] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=20.55
+[2026-10-23 16:09:42,192] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=20.66
+[2026-10-23 16:09:42,187] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=21.07
+[2026-10-23 16:09:36,022] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=10.09
+[2026-10-23 16:09:36,018] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=7.94
+[2026-10-23 16:09:36,005] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=18.30
+[2026-10-23 16:09:36,004] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=21.78
+[2026-10-23 16:09:36,002] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=21.67
+[2026-10-23 16:09:36,000] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=29.29
+[2026-10-23 16:09:35,997] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=20.66
+[2026-10-23 16:09:35,996] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=18.12
+[2026-10-23 16:09:33,231] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=7.40
+[2026-10-23 16:09:33,223] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=7.82
+[2026-10-23 16:09:33,211] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=25.54
+[2026-10-23 16:09:33,210] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=15.45
+[2026-10-23 16:09:33,210] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=17.21
+[2026-10-23 16:09:33,203] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=15.22
+[2026-10-23 16:09:33,202] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=12.40
+[2026-10-23 16:09:33,201] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=9.96
+[2026-10-23 16:09:27,393] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=10.96
+[2026-10-23 16:09:27,389] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=8.92
+[2026-10-23 16:09:27,376] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=33.82
+[2026-10-23 16:09:27,371] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=18.59
+[2026-10-23 16:09:27,370] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=19.77
+[2026-10-23 16:09:27,366] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=19.50
+[2026-10-23 16:09:27,362] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=12.78
+[2026-10-23 16:09:27,361] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=15.68
+[2026-10-23 16:09:20,396] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=7.62
+[2026-10-23 16:09:20,383] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=7.03
+[2026-10-23 16:09:20,369] INFO event=api.request method=DELETE endpoint=api/batches/(?P<pk>[^/.]+)/$ actor_id=1 status=204 duration_ms=10.83
+[2026-10-23 16:09:20,368] INFO event=campaign.deleted actor_id=1 campaign_id=14
+[2026-10-23 16:09:18,036] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=5.78
+[2026-10-23 16:09:17,386] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=8.09
+[2026-10-23 16:09:17,383] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=6.74
+[2026-10-23 16:09:17,370] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=5.04
+[2026-10-23 16:09:17,360] INFO event=api.request method=DELETE endpoint=api/batches/(?P<pk>[^/.]+)/$ actor_id=1 status=204 duration_ms=9.29
+[2026-10-23 16:09:17,359] INFO event=campaign.deleted actor_id=1 campaign_id=15
+[2026-10-23 16:09:14,894] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=7.50
+[2026-10-23 16:09:14,892] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=8.64
+[2026-10-23 16:09:14,892] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=6.69
+[2026-10-23 16:09:14,868] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=5.56
+[2026-10-23 16:09:14,857] INFO event=api.request method=DELETE endpoint=api/batches/(?P<pk>[^/.]+)/$ actor_id=1 status=204 duration_ms=9.02
+[2026-10-23 16:09:14,855] INFO event=campaign.deleted actor_id=1 campaign_id=16
+[2026-10-23 16:09:10,349] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.64
+[2026-10-23 16:09:10,347] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.67
+[2026-10-23 16:09:10,346] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.94
+[2026-10-23 16:09:10,344] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.70
+[2026-10-23 16:09:10,327] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=4.86
+[2026-10-23 16:09:10,317] INFO event=api.request method=DELETE endpoint=api/batches/(?P<pk>[^/.]+)/$ actor_id=1 status=204 duration_ms=11.66
+[2026-10-23 16:09:10,316] INFO event=campaign.deleted actor_id=1 campaign_id=17
+[2026-10-23 16:09:03,079] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=13.70
+[2026-10-23 16:09:03,076] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=12.85
+[2026-10-23 16:09:03,067] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=20.10
+[2026-10-23 16:09:03,047] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=15.14
+[2026-10-23 16:09:03,042] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=18.05
+[2026-10-23 16:09:03,035] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=16.34
+[2026-10-23 16:09:03,013] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=20.73
+[2026-10-23 16:09:03,012] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=33.07
+[2026-10-23 16:09:03,005] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=39.75
+[2026-10-23 16:09:03,003] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=30.21
+[2026-10-23 16:09:02,991] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=20.74
+[2026-10-23 16:09:02,986] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=18.33
+[2026-10-23 15:58:38,246] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=13.40
+[2026-10-23 15:58:38,243] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=15.54
+[2026-10-23 15:58:38,242] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=16.38
+[2026-10-23 15:58:38,242] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=12.86
+[2026-10-23 15:58:38,241] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.97
+[2026-10-23 15:58:38,216] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=6.43
+[2026-10-23 15:58:38,209] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=14.48
+[2026-10-23 15:58:38,208] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=16.54
+[2026-10-23 15:58:38,202] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=24.46
+[2026-10-23 15:58:38,202] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=15.90
+[2026-10-23 15:58:38,200] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=19.26
+[2026-10-23 15:58:38,194] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=29.77
+[2026-10-23 15:56:02,618] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=11.65
+[2026-10-23 15:56:02,614] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=16.34
+[2026-10-23 15:56:02,611] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=16.13
+[2026-10-23 15:56:02,610] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=17.20
+[2026-10-23 15:56:02,608] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=18.03
+[2026-10-23 15:56:02,586] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=12.63
+[2026-10-23 15:56:02,570] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=42.74
+[2026-10-23 15:56:02,565] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=25.61
+[2026-10-23 15:56:02,563] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=25.46
+[2026-10-23 15:56:02,554] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=22.33
+[2026-10-23 15:56:02,552] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=17.82
+[2026-10-23 15:56:02,550] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=14.14
+[2026-10-23 15:56:00,677] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=36.72
+[2026-10-23 15:56:00,675] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=42.31
+[2026-10-23 15:56:00,674] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=35.72
+[2026-10-23 15:56:00,674] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=37.27
+[2026-10-23 15:56:00,674] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=43.45
+[2026-10-23 15:56:00,615] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=26.76
+[2026-10-23 15:56:00,614] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=22.85
+[2026-10-23 15:56:00,611] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=28.78
+[2026-10-23 15:56:00,606] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=21.68
+[2026-10-23 15:56:00,605] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=19.33
+[2026-10-23 15:56:00,595] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=15.47
+[2026-10-23 15:55:59,792] INFO event=api.request method=GET endpoint=api/inbound-replies/ actor_id=1 status=200 duration_ms=7.30
+[2026-10-23 15:55:59,080] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=8.88
+[2026-10-23 15:55:59,079] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=8.66
+[2026-10-23 15:55:59,075] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.05
+[2026-10-23 15:55:59,069] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=11.27
+[2026-10-23 15:55:59,064] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.71
+[2026-10-23 15:55:59,053] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=21.55
+[2026-10-23 15:55:59,052] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=28.81
+[2026-10-23 15:55:59,044] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=14.53
+[2026-10-23 15:55:59,042] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=17.17
+[2026-10-23 15:55:59,038] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=12.47
+[2026-10-23 15:55:59,028] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=9.06
+[2026-10-23 15:55:57,323] INFO event=api.request method=GET endpoint=api/inbound-replies/ actor_id=1 status=200 duration_ms=6.01
+[2026-10-23 15:55:52,594] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=8.66
+[2026-10-23 15:55:52,590] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.76
+[2026-10-23 15:55:52,584] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.97
+[2026-10-23 15:55:52,578] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=12.13
+[2026-10-23 15:55:52,573] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=8.05
+[2026-10-23 15:55:52,572] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=10.35
+[2026-10-23 15:55:52,557] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=34.01
+[2026-10-23 15:55:52,557] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=20.96
+[2026-10-23 15:55:52,556] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=22.76
+[2026-10-23 15:55:52,546] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=16.83
+[2026-10-23 15:55:52,545] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=17.56
+[2026-10-23 15:55:52,544] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=18.37
+[2026-10-23 15:52:42,246] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=8.28
+[2026-10-23 15:52:42,243] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.40
+[2026-10-23 15:52:42,237] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=8.97
+[2026-10-23 15:52:42,232] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=12.60
+[2026-10-23 15:52:42,228] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=10.34
+[2026-10-23 15:52:42,226] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=11.41
+[2026-10-23 15:52:42,209] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=27.80
+[2026-10-23 15:52:42,209] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=21.27
+[2026-10-23 15:52:42,208] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=16.04
+[2026-10-23 15:52:42,205] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=17.69
+[2026-10-23 15:52:42,203] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=13.48
+[2026-10-23 15:52:42,203] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=18.49
+[2026-10-23 15:52:35,714] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=6.04
+[2026-10-23 15:52:27,943] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=11.76
+[2026-10-23 15:52:27,941] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=12.26
+[2026-10-23 15:52:27,938] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=11.13
+[2026-10-23 15:52:27,938] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=12.59
+[2026-10-23 15:52:27,936] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=11.98
+[2026-10-23 15:52:27,918] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=8.21
+[2026-10-23 15:52:27,914] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=5.10
+[2026-10-23 15:52:27,889] INFO event=api.request method=POST endpoint=api/batches/(?P<pk>[^/.]+)/send-now/$ actor_id=1 status=200 duration_ms=5210.33
+[2026-10-23 15:52:27,889] INFO event=email_send.completed actor_id=1 campaign_id=18 lead_id=all sent=1 failed=0
+[2026-10-23 15:52:27,855] INFO event=email_send.sent campaign_id=18 lead_id=25 step=1
+[2026-10-23 15:52:20,724] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=7.32
+[2026-10-23 15:52:20,718] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=8.89
+[2026-10-23 15:52:20,711] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=8.95
+[2026-10-23 15:52:20,707] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=10.81
+[2026-10-23 15:52:20,704] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=10.48
+[2026-10-23 15:52:20,691] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=6.46
+[2026-10-23 15:52:20,687] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=60.15
+[2026-10-23 15:52:20,686] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=45.14
+[2026-10-23 15:52:20,682] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=42.14
+[2026-10-23 15:52:20,681] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=42.29
+[2026-10-23 15:52:20,678] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=44.71
+[2026-10-23 15:52:20,673] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=31.56
+[2026-10-23 15:49:58,285] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=13.49
+[2026-10-23 15:49:58,281] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=11.27
+[2026-10-23 15:49:58,281] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=16.51
+[2026-10-23 15:49:58,279] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=12.77
+[2026-10-23 15:49:58,278] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.73
+[2026-10-23 15:49:58,253] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=8.83
+[2026-10-23 15:49:58,240] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=13.20
+[2026-10-23 15:49:58,239] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=17.34
+[2026-10-23 15:49:58,237] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=19.01
+[2026-10-23 15:49:58,235] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=15.22
+[2026-10-23 15:49:58,234] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=18.05
+[2026-10-23 15:49:58,229] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=22.86
+[2026-10-23 15:49:42,259] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=5.86
+[2026-10-23 15:49:36,917] WARNING event=api.request method=POST endpoint=api/batches/(?P<pk>[^/.]+)/send-now/$ actor_id=1 status=400 duration_ms=1265.67
+[2026-10-23 15:49:36,916] INFO event=email_send.completed actor_id=1 campaign_id=18 lead_id=all sent=0 failed=1
+[2026-10-23 15:49:36,908] ERROR event=email_send.failed campaign_id=18 lead_id=25 step=1
+Traceback (most recent call last):
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\campaigns\management\commands\process_email_campaign.py", line 584, in handle
+    msg.send()
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\django\core\mail\message.py", line 307, in send
+    return self.get_connection(fail_silently).send_messages([self])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base.py", line 151, in send_messages
+    sent = self._send(message)
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base_requests.py", line 52, in _send
+    return super()._send(message)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base.py", line 181, in _send
+    response = self.post_to_esp(payload, message)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base_requests.py", line 109, in post_to_esp
+    self.raise_for_status(response, payload, message)
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\mailgun.py", line 59, in raise_for_status
+    super().raise_for_status(response, payload, message)
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base_requests.py", line 120, in raise_for_status
+    raise AnymailRequestsAPIError(
+anymail.exceptions.AnymailRequestsAPIError: Mailgun API response 401 (Unauthorized): 'Forbidden'
+[2026-10-23 15:49:29,959] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=12.68
+[2026-10-23 15:49:29,955] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=11.13
+[2026-10-23 15:49:29,954] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=13.96
+[2026-10-23 15:49:29,952] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=13.43
+[2026-10-23 15:49:29,949] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=12.44
+[2026-10-23 15:49:29,921] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=33.98
+[2026-10-23 15:49:29,919] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=26.87
+[2026-10-23 15:49:29,913] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=16.97
+[2026-10-23 15:49:29,905] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=15.60
+[2026-10-23 15:49:29,903] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=12.23
+[2026-10-23 15:49:29,900] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=15.98
+[2026-10-23 15:49:27,285] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.15
+[2026-10-23 15:49:27,283] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=8.73
+[2026-10-23 15:49:27,283] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.63
+[2026-10-23 15:49:27,281] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=11.80
+[2026-10-23 15:49:27,280] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=13.22
+[2026-10-23 15:49:27,260] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=21.14
+[2026-10-23 15:49:27,259] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=12.41
+[2026-10-23 15:49:27,258] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=13.87
+[2026-10-23 15:49:27,226] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=7.67
+[2026-10-23 15:49:20,503] WARNING event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=unknown status=401 duration_ms=0.94
+[2026-10-23 15:49:20,501] WARNING event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=unknown status=401 duration_ms=0.89
+[2026-10-23 15:49:20,500] WARNING event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=unknown status=401 duration_ms=1.46
+[2026-10-23 15:49:20,497] WARNING event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=unknown status=401 duration_ms=0.65
+[2026-10-23 15:49:20,490] WARNING event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=unknown status=401 duration_ms=0.83
+[2026-10-23 15:49:20,445] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=7.55
+[2026-10-23 15:49:20,433] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=20.62
+[2026-10-23 15:49:20,430] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=16.47
+[2026-10-23 15:49:20,427] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=17.92
+[2026-10-23 15:49:20,423] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=12.74
+[2026-10-23 15:49:20,422] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=10.82
+[2026-10-23 15:49:20,419] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=11.76
+[2026-10-23 15:49:15,900] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=8.27
+[2026-10-23 15:49:15,894] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=7.81
+[2026-10-23 15:49:15,889] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=11.22
+[2026-10-23 15:49:15,886] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.83
+[2026-10-23 15:49:15,882] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=12.10
+[2026-10-23 15:49:15,875] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=7.50
+[2026-10-23 15:49:15,865] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=20.64
+[2026-10-23 15:49:15,860] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=12.45
+[2026-10-23 15:49:15,859] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=31.50
+[2026-10-23 15:49:15,859] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=18.85
+[2026-10-23 15:49:15,858] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=19.51
+[2026-10-23 15:49:15,857] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=21.11
+[2026-10-23 15:47:58,006] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.11
+[2026-10-23 15:47:57,999] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=11.49
+[2026-10-23 15:47:57,993] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=14.07
+[2026-10-23 15:47:57,993] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=17.32
+[2026-10-23 15:47:57,987] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=13.93
+[2026-10-23 15:47:57,985] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=15.99
+[2026-10-23 15:47:57,963] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=15.90
+[2026-10-23 15:47:57,961] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=19.47
+[2026-10-23 15:47:57,959] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=19.87
+[2026-10-23 15:47:57,956] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=18.52
+[2026-10-23 15:47:57,955] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=19.24
+[2026-10-23 15:47:57,951] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=30.48
+[2026-10-23 15:47:51,909] WARNING event=api.request method=POST endpoint=api/batches/(?P<pk>[^/.]+)/send-now/$ actor_id=1 status=400 duration_ms=1065.32
+[2026-10-23 15:47:51,907] INFO event=email_send.completed actor_id=1 campaign_id=18 lead_id=all sent=0 failed=1
+[2026-10-23 15:47:51,899] ERROR event=email_send.failed campaign_id=18 lead_id=25 step=1
+Traceback (most recent call last):
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\campaigns\management\commands\process_email_campaign.py", line 584, in handle
+    msg.send()
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\django\core\mail\message.py", line 307, in send
+    return self.get_connection(fail_silently).send_messages([self])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base.py", line 151, in send_messages
+    sent = self._send(message)
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base_requests.py", line 52, in _send
+    return super()._send(message)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base.py", line 181, in _send
+    response = self.post_to_esp(payload, message)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base_requests.py", line 109, in post_to_esp
+    self.raise_for_status(response, payload, message)
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\mailgun.py", line 59, in raise_for_status
+    super().raise_for_status(response, payload, message)
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base_requests.py", line 120, in raise_for_status
+    raise AnymailRequestsAPIError(
+anymail.exceptions.AnymailRequestsAPIError: Mailgun API response 401 (Unauthorized): 'Forbidden'
+[2026-10-23 15:47:44,859] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=10.52
+[2026-10-23 15:47:44,856] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=13.94
+[2026-10-23 15:47:44,853] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=13.69
+[2026-10-23 15:47:44,852] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=15.01
+[2026-10-23 15:47:44,850] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=14.91
+[2026-10-23 15:47:44,833] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=8.26
+[2026-10-23 15:47:44,822] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=17.70
+[2026-10-23 15:47:44,820] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=10.37
+[2026-10-23 15:47:44,816] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=14.03
+[2026-10-23 15:47:44,813] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=19.34
+[2026-10-23 15:47:44,811] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=15.94
+[2026-10-23 15:47:44,807] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=25.37
+[2026-10-23 15:46:46,131] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=13.91
+[2026-10-23 15:46:46,126] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=15.41
+[2026-10-23 15:46:46,114] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=12.39
+[2026-10-23 15:46:46,109] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=13.82
+[2026-10-23 15:46:46,105] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=13.33
+[2026-10-23 15:46:46,102] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=13.64
+[2026-10-23 15:46:46,084] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=17.85
+[2026-10-23 15:46:46,082] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=20.02
+[2026-10-23 15:46:46,082] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=31.76
+[2026-10-23 15:46:46,081] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=22.65
+[2026-10-23 15:46:46,080] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=19.63
+[2026-10-23 15:46:46,072] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=16.69
+[2026-10-23 15:46:32,819] WARNING event=api.request method=POST endpoint=api/batches/(?P<pk>[^/.]+)/send-now/$ actor_id=1 status=400 duration_ms=1320.10
+[2026-10-23 15:46:32,818] INFO event=email_send.completed actor_id=1 campaign_id=18 lead_id=all sent=0 failed=1
+[2026-10-23 15:46:32,802] ERROR event=email_send.failed campaign_id=18 lead_id=25 step=1
+Traceback (most recent call last):
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\campaigns\management\commands\process_email_campaign.py", line 584, in handle
+    msg.send()
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\django\core\mail\message.py", line 307, in send
+    return self.get_connection(fail_silently).send_messages([self])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base.py", line 151, in send_messages
+    sent = self._send(message)
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base_requests.py", line 52, in _send
+    return super()._send(message)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base.py", line 181, in _send
+    response = self.post_to_esp(payload, message)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base_requests.py", line 109, in post_to_esp
+    self.raise_for_status(response, payload, message)
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\mailgun.py", line 59, in raise_for_status
+    super().raise_for_status(response, payload, message)
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base_requests.py", line 120, in raise_for_status
+    raise AnymailRequestsAPIError(
+anymail.exceptions.AnymailRequestsAPIError: Mailgun API response 401 (Unauthorized): 'Forbidden'
+[2026-10-23 15:46:28,694] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=8.91
+[2026-10-23 15:46:25,105] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=7.53
+[2026-10-23 15:46:23,699] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=6.35
+[2026-10-23 15:46:23,041] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=5.86
+[2026-10-23 15:46:21,952] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=5.76
+[2026-10-23 15:46:20,698] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=5.78
+[2026-10-23 15:46:17,755] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=6.77
+[2026-10-23 15:46:16,659] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=6.91
+[2026-10-23 15:46:13,714] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.36
+[2026-10-23 15:46:13,709] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=10.97
+[2026-10-23 15:46:13,706] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=14.20
+[2026-10-23 15:46:13,697] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=12.08
+[2026-10-23 15:46:13,695] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=11.91
+[2026-10-23 15:46:13,690] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=10.10
+[2026-10-23 15:46:13,675] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=14.33
+[2026-10-23 15:46:13,674] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=24.57
+[2026-10-23 15:46:13,673] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=18.03
+[2026-10-23 15:46:13,673] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=34.74
+[2026-10-23 15:46:13,669] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=17.93
+[2026-10-23 15:46:13,669] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=22.60
+[2026-10-23 15:44:54,298] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=11.17
+[2026-10-23 15:44:54,293] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=17.66
+[2026-10-23 15:44:54,289] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=17.89
+[2026-10-23 15:44:54,284] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=15.98
+[2026-10-23 15:44:54,284] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=17.86
+[2026-10-23 15:44:54,266] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=8.49
+[2026-10-23 15:44:54,251] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=16.72
+[2026-10-23 15:44:54,250] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=20.64
+[2026-10-23 15:44:54,249] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=20.47
+[2026-10-23 15:44:54,245] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=17.93
+[2026-10-23 15:44:54,244] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=25.31
+[2026-10-23 15:44:54,242] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=20.79
+[2026-10-23 15:44:50,024] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=5.06
+[2026-10-23 15:44:45,258] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=6.70
+[2026-10-23 15:44:38,686] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=10.78
+[2026-10-23 15:44:38,682] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=8.99
+[2026-10-23 15:44:38,681] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=11.66
+[2026-10-23 15:44:38,681] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=10.17
+[2026-10-23 15:44:38,681] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=8.88
+[2026-10-23 15:44:38,660] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=5.89
+[2026-10-23 15:44:38,649] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=5.61
+[2026-10-23 15:44:38,638] INFO event=api.request method=POST endpoint=api/batches/$ actor_id=1 status=201 duration_ms=16.36
+[2026-10-23 15:44:38,636] INFO event=campaign.created actor_id=1 campaign_id=18 recipient_count=1
+[2026-10-23 15:44:35,007] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=5.16
+[2026-10-23 15:44:30,457] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=10.68
+[2026-10-23 15:44:30,456] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=13.92
+[2026-10-23 15:44:30,456] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=11.73
+[2026-10-23 15:44:30,455] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=14.64
+[2026-10-23 15:44:30,424] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=15.69
+[2026-10-23 15:44:30,423] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=26.28
+[2026-10-23 15:44:30,421] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=17.29
+[2026-10-23 15:44:30,417] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=15.81
+[2026-10-23 15:44:30,417] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=16.93
+[2026-10-23 15:44:30,407] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=12.79
+[2026-10-23 15:44:27,407] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=12.47
+[2026-10-23 15:44:27,368] INFO event=api.request method=GET endpoint=api/leads/<int:pk>/ actor_id=1 status=200 duration_ms=9.08
+[2026-10-23 15:44:27,352] INFO event=api.request method=PATCH endpoint=api/leads/<int:pk>/ actor_id=1 status=200 duration_ms=16.26
+[2026-10-23 15:44:19,985] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=5.42
+[2026-10-23 15:44:13,877] INFO event=api.request method=GET endpoint=api/leads/<int:pk>/ actor_id=1 status=200 duration_ms=22.45
+[2026-10-23 15:44:13,862] INFO event=api.request method=GET endpoint=api/lead-options/ actor_id=1 status=200 duration_ms=12.44
+[2026-10-23 15:44:08,262] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=15.33
+[2026-10-23 15:44:08,214] INFO event=api.request method=POST endpoint=api/leads/ actor_id=1 status=201 duration_ms=17.13
+[2026-10-23 15:44:04,967] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=5.42
+[2026-10-23 15:43:58,005] INFO event=api.request method=GET endpoint=api/lead-options/ actor_id=1 status=200 duration_ms=9.50
+[2026-10-23 15:43:49,946] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=6.65
+[2026-10-23 15:43:48,976] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=9.86
+[2026-10-23 15:43:48,957] INFO event=api.request method=DELETE endpoint=api/leads/<int:pk>/ actor_id=1 status=204 duration_ms=27.60
+[2026-10-23 15:43:48,954] INFO event=api.request method=DELETE endpoint=api/leads/<int:pk>/ actor_id=1 status=204 duration_ms=21.00
+[2026-10-23 15:43:48,950] INFO event=api.request method=DELETE endpoint=api/leads/<int:pk>/ actor_id=1 status=204 duration_ms=29.11
+[2026-10-23 15:43:48,928] INFO event=api.request method=DELETE endpoint=api/leads/<int:pk>/ actor_id=1 status=204 duration_ms=21.94
+[2026-10-23 15:43:48,922] INFO event=api.request method=DELETE endpoint=api/leads/<int:pk>/ actor_id=1 status=204 duration_ms=27.96
+[2026-10-23 15:43:48,918] INFO event=api.request method=DELETE endpoint=api/leads/<int:pk>/ actor_id=1 status=204 duration_ms=30.02
+[2026-10-23 15:43:48,908] INFO event=api.request method=DELETE endpoint=api/leads/<int:pk>/ actor_id=1 status=204 duration_ms=26.22
+[2026-10-23 15:43:48,896] INFO event=api.request method=DELETE endpoint=api/leads/<int:pk>/ actor_id=1 status=204 duration_ms=23.83
+[2026-10-23 15:43:48,884] INFO event=api.request method=DELETE endpoint=api/leads/<int:pk>/ actor_id=1 status=204 duration_ms=21.35
+[2026-10-23 15:43:48,875] INFO event=api.request method=DELETE endpoint=api/leads/<int:pk>/ actor_id=1 status=204 duration_ms=19.35
+[2026-10-23 15:43:48,870] INFO event=api.request method=DELETE endpoint=api/leads/<int:pk>/ actor_id=1 status=204 duration_ms=20.54
+[2026-10-23 15:43:48,854] INFO event=api.request method=DELETE endpoint=api/leads/<int:pk>/ actor_id=1 status=204 duration_ms=33.04
+[2026-10-23 15:43:48,853] INFO event=api.request method=DELETE endpoint=api/leads/<int:pk>/ actor_id=1 status=204 duration_ms=40.52
+[2026-10-23 15:43:48,853] INFO event=api.request method=DELETE endpoint=api/leads/<int:pk>/ actor_id=1 status=204 duration_ms=36.77
+[2026-10-23 15:43:48,852] INFO event=api.request method=DELETE endpoint=api/leads/<int:pk>/ actor_id=1 status=204 duration_ms=35.23
+[2026-10-23 15:43:48,847] INFO event=api.request method=DELETE endpoint=api/leads/<int:pk>/ actor_id=1 status=204 duration_ms=38.89
+[2026-10-23 15:43:48,838] INFO event=api.request method=DELETE endpoint=api/leads/<int:pk>/ actor_id=1 status=204 duration_ms=31.54
+[2026-10-23 15:43:36,884] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=60.21
+[2026-10-23 15:43:35,165] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=10.43
+[2026-10-23 15:43:35,161] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.37
+[2026-10-23 15:43:34,947] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=13.15
+[2026-10-23 15:43:34,944] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=11.31
+[2026-10-23 15:43:34,941] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=11.65
+[2026-10-23 15:43:34,812] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=90.34
+[2026-10-23 15:43:34,766] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=21.05
+[2026-10-23 15:43:34,764] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=23.64
+[2026-10-23 15:43:34,761] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=28.00
+[2026-10-23 15:43:34,757] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=20.49
+[2026-10-23 15:43:34,745] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=18.99
+[2026-10-23 15:42:14,001] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=10.18
+[2026-10-23 15:42:13,990] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=16.58
+[2026-10-23 15:42:13,987] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=117.65
+[2026-10-23 15:42:13,980] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=15.62
+[2026-10-23 15:42:13,964] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=12.37
+[2026-10-23 15:42:13,950] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=9.73
+[2026-10-23 15:42:13,906] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=20.25
+[2026-10-23 15:42:13,903] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=21.41
+[2026-10-23 15:42:13,902] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=20.84
+[2026-10-23 15:42:13,899] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=19.89
+[2026-10-23 15:42:13,893] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=16.39
+[2026-10-23 15:41:56,196] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=6.62
+[2026-10-23 15:41:54,277] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.17
+[2026-10-23 15:41:54,272] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=88.84
+[2026-10-23 15:41:54,268] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=10.73
+[2026-10-23 15:41:54,259] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=12.18
+[2026-10-23 15:41:54,245] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=13.98
+[2026-10-23 15:41:54,236] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=12.74
+[2026-10-23 15:41:54,215] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=16.89
+[2026-10-23 15:41:54,213] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=19.73
+[2026-10-23 15:41:54,211] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=19.12
+[2026-10-23 15:41:54,209] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=14.54
+[2026-10-23 15:41:54,207] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=17.96
+[2026-10-23 15:41:40,236] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=14.50
+[2026-10-23 15:41:36,435] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=10.14
+[2026-10-23 15:41:36,432] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=12.68
+[2026-10-23 15:41:36,431] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=9.60
+[2026-10-23 15:41:36,429] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=11.04
+[2026-10-23 15:41:36,410] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=5.52
+[2026-10-23 15:41:36,389] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=5.59
+[2026-10-23 15:41:36,387] INFO event=api.request method=POST endpoint=api/batches/$ actor_id=1 status=201 duration_ms=2647.85
+[2026-10-23 15:41:36,382] ERROR event=email_send.failed campaign_id=17 lead_id=24 step=1
+Traceback (most recent call last):
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\campaigns\management\commands\process_email_campaign.py", line 584, in handle
+    msg.send()
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\django\core\mail\message.py", line 307, in send
+    return self.get_connection(fail_silently).send_messages([self])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base.py", line 151, in send_messages
+    sent = self._send(message)
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base_requests.py", line 52, in _send
+    return super()._send(message)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base.py", line 181, in _send
+    response = self.post_to_esp(payload, message)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base_requests.py", line 109, in post_to_esp
+    self.raise_for_status(response, payload, message)
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\mailgun.py", line 59, in raise_for_status
+    super().raise_for_status(response, payload, message)
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base_requests.py", line 120, in raise_for_status
+    raise AnymailRequestsAPIError(
+anymail.exceptions.AnymailRequestsAPIError: Mailgun API response 401 (Unauthorized): 'Forbidden'
+[2026-10-23 15:41:35,174] ERROR event=email_send.failed campaign_id=17 lead_id=6 step=1
+Traceback (most recent call last):
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\campaigns\management\commands\process_email_campaign.py", line 584, in handle
+    msg.send()
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\django\core\mail\message.py", line 307, in send
+    return self.get_connection(fail_silently).send_messages([self])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base.py", line 151, in send_messages
+    sent = self._send(message)
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base_requests.py", line 52, in _send
+    return super()._send(message)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base.py", line 181, in _send
+    response = self.post_to_esp(payload, message)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base_requests.py", line 109, in post_to_esp
+    self.raise_for_status(response, payload, message)
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\mailgun.py", line 59, in raise_for_status
+    super().raise_for_status(response, payload, message)
+  File "C:\Users\ADMIN\OneDrive\Desktop\email\email_compaign\venv\Lib\site-packages\anymail\backends\base_requests.py", line 120, in raise_for_status
+    raise AnymailRequestsAPIError(
+anymail.exceptions.AnymailRequestsAPIError: Mailgun API response 401 (Unauthorized): 'Forbidden'
+[2026-10-23 15:41:33,747] INFO event=campaign.created actor_id=1 campaign_id=17 recipient_count=2
+[2026-10-23 15:41:25,209] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=13.53
+[2026-10-23 15:41:16,005] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=85.14
+[2026-10-23 15:41:15,985] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=16.20
+[2026-10-23 15:41:15,977] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=18.13
+[2026-10-23 15:41:15,967] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=13.13
+[2026-10-23 15:41:15,946] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=19.24
+[2026-10-23 15:41:15,940] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=15.51
+[2026-10-23 15:41:15,939] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=16.24
+[2026-10-23 15:41:15,938] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=16.23
+[2026-10-23 15:41:15,932] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=16.23
+[2026-10-23 15:41:14,862] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=40.80
+[2026-10-23 15:41:10,254] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=81.84
+[2026-10-23 15:41:10,232] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=21.65
+[2026-10-23 15:41:10,232] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=17.71
+[2026-10-23 15:41:10,225] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=18.08
+[2026-10-23 15:41:10,198] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=15.63
+[2026-10-23 15:41:10,189] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=13.22
+[2026-10-23 15:41:10,163] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=17.20
+[2026-10-23 15:41:00,569] WARNING event=api.request method=GET endpoint=api/email-logs/ actor_id=unknown status=401 duration_ms=16.16
+[2026-10-23 15:41:00,568] WARNING event=api.request method=GET endpoint=api/batches/$ actor_id=unknown status=401 duration_ms=15.75
+[2026-10-23 15:41:00,564] WARNING event=api.request method=GET endpoint=api/leads/ actor_id=unknown status=401 duration_ms=11.23
+[2026-10-23 15:00:31,909] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=45.46
+[2026-10-23 15:00:31,870] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=12.54
+[2026-10-23 14:45:00,478] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=55.17
+[2026-10-23 14:45:00,432] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=11.04
+[2026-10-23 14:43:19,951] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=46.30
+[2026-10-23 14:43:19,912] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=9.53
+[2026-10-23 14:42:08,359] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=50.83
+[2026-10-23 14:42:08,317] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=10.00
+[2026-10-23 14:41:42,607] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=56.58
+[2026-10-23 14:41:42,561] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=11.81
+[2026-10-23 14:40:10,469] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=46.57
+[2026-10-23 14:40:10,430] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=8.81
+[2026-10-23 14:40:10,385] WARNING event=api.request method=GET endpoint=api/leads/ actor_id=unknown status=401 duration_ms=0.70
+[2026-10-23 14:40:10,383] WARNING event=api.request method=GET endpoint=api/email-logs/ actor_id=unknown status=401 duration_ms=1.16
+[2026-10-23 14:31:28,545] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=54.06
+[2026-10-23 14:31:28,501] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=12.25
+[2026-10-23 14:07:44,555] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=46.85
+[2026-10-23 14:07:44,521] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=10.39
+[2026-10-23 14:07:44,467] WARNING event=api.request method=GET endpoint=api/leads/ actor_id=unknown status=401 duration_ms=1.18
+[2026-10-23 14:07:44,464] WARNING event=api.request method=GET endpoint=api/email-logs/ actor_id=unknown status=401 duration_ms=2.56
+[2026-10-23 13:41:09,102] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=67.05
+[2026-10-23 13:35:00,224] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=53.17
+[2026-10-23 13:35:00,178] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=10.16
+[2026-10-23 13:34:01,843] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=53.24
+[2026-10-23 13:34:01,804] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=11.25
+[2026-10-23 13:33:21,996] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=41.92
+[2026-10-23 13:33:15,764] INFO event=api.request method=DELETE endpoint=api/leads/<int:pk>/ actor_id=1 status=204 duration_ms=232.04
+[2026-10-23 13:33:02,385] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=1057.01
+[2026-10-23 13:33:02,365] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=1037.33
+[2026-10-23 13:19:59,709] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=70.11
+[2026-10-23 13:19:59,675] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=34.18
+[2026-10-23 13:19:36,804] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=49.40
+[2026-10-23 13:19:36,767] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=9.81
+[2026-10-23 13:19:33,202] INFO event=api.request method=POST endpoint=api/leads/sample-data/ actor_id=1 status=200 duration_ms=11.09
+[2026-10-23 13:19:33,200] INFO event=lead.sample_data_created actor_id=1 created=0 existing=3
+[2026-10-23 13:19:33,081] INFO event=api.request method=POST endpoint=api/leads/sample-data/ actor_id=1 status=200 duration_ms=8.21
+[2026-10-23 13:19:33,080] INFO event=lead.sample_data_created actor_id=1 created=0 existing=3
+[2026-10-23 13:19:33,032] INFO event=api.request method=POST endpoint=api/leads/sample-data/ actor_id=1 status=200 duration_ms=8.18
+[2026-10-23 13:19:33,031] INFO event=lead.sample_data_created actor_id=1 created=0 existing=3
+[2026-10-23 13:19:32,297] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=83.60
+[2026-10-23 13:19:32,232] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=12.93
+[2026-10-23 13:19:27,844] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=6.55
+[2026-10-23 13:19:15,780] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=48.77
+[2026-10-23 13:19:12,899] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=71.32
+[2026-10-23 13:19:12,870] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=18.09
+[2026-10-23 13:19:12,870] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=13.50
+[2026-10-23 13:19:12,868] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=14.09
+[2026-10-23 13:19:12,849] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=15.21
+[2026-10-23 13:19:12,840] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=8.21
+[2026-10-23 13:19:12,807] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=7.89
+[2026-10-23 13:19:04,912] WARNING event=api.request method=GET endpoint=api/email-logs/ actor_id=unknown status=401 duration_ms=0.44
+[2026-10-23 13:19:04,911] WARNING event=api.request method=GET endpoint=api/batches/$ actor_id=unknown status=401 duration_ms=0.48
+[2026-10-23 13:19:04,910] WARNING event=api.request method=GET endpoint=api/leads/ actor_id=unknown status=401 duration_ms=0.66
+[2026-10-23 12:52:37,022] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=60.87
+[2026-10-23 12:52:36,969] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=10.42
+[2026-10-23 12:52:01,087] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=57.83
+[2026-10-23 12:52:01,036] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=10.13
+[2026-10-23 12:51:40,736] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=7.55
+[2026-10-23 12:51:37,600] INFO event=api.request method=POST endpoint=api/leads/sample-data/ actor_id=1 status=200 duration_ms=8.11
+[2026-10-23 12:51:37,598] INFO event=lead.sample_data_created actor_id=1 created=0 existing=3
+[2026-10-23 12:51:25,752] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=50.57
+[2026-10-23 12:51:25,708] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=10.36
+[2026-10-23 12:51:16,675] ERROR event=api.request method=POST endpoint=api/leads/sample-data/ actor_id=1 status=500 duration_ms=229.32
+[2026-10-23 12:51:16,561] INFO event=api.request method=POST endpoint=api/leads/sample-data/ actor_id=1 status=200 duration_ms=10.11
+[2026-10-23 12:51:16,560] INFO event=lead.sample_data_created actor_id=1 created=0 existing=3
+[2026-10-23 12:51:16,530] INFO event=api.request method=POST endpoint=api/leads/sample-data/ actor_id=1 status=200 duration_ms=45.26
+[2026-10-23 12:51:16,527] INFO event=lead.sample_data_created actor_id=1 created=3 existing=0
+[2026-10-23 12:51:15,492] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=35.15
+[2026-10-23 12:51:13,129] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=69.51
+[2026-10-23 12:51:13,125] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=14.14
+[2026-10-23 12:51:13,117] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=17.73
+[2026-10-23 12:51:13,116] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=15.36
+[2026-10-23 12:51:13,093] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=22.22
+[2026-10-23 12:51:13,087] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=15.84
+[2026-10-23 12:51:13,085] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=16.00
+[2026-10-23 12:51:13,082] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=15.09
+[2026-10-23 12:51:13,076] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=14.10
+[2026-10-23 12:51:12,460] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=35.99
+[2026-10-23 12:51:10,373] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=78.05
+[2026-10-23 12:51:10,359] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=23.41
+[2026-10-23 12:51:10,352] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=20.32
+[2026-10-23 12:51:10,351] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=21.12
+[2026-10-23 12:51:10,318] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=16.64
+[2026-10-23 12:51:10,316] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=23.49
+[2026-10-23 12:51:10,311] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=22.28
+[2026-10-23 12:46:56,223] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=70.60
+[2026-10-23 12:46:56,166] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=34.50
+[2026-10-23 12:46:56,166] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=31.66
+[2026-10-23 12:46:56,056] WARNING event=api.request method=GET endpoint=api/batches/$ actor_id=unknown status=401 duration_ms=28.85
+[2026-10-23 12:46:56,056] WARNING event=api.request method=GET endpoint=api/email-logs/ actor_id=unknown status=401 duration_ms=28.17
+[2026-10-23 12:46:56,055] WARNING event=api.request method=GET endpoint=api/email-logs/ actor_id=unknown status=401 duration_ms=27.03
+[2026-10-23 12:46:56,053] WARNING event=api.request method=GET endpoint=api/leads/ actor_id=unknown status=401 duration_ms=26.72
+[2026-10-23 12:05:14,590] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=65.20
+[2026-10-23 12:05:14,590] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=16.22
+[2026-10-23 12:05:14,590] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=18.41
+[2026-10-23 12:05:14,575] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=14.97
+[2026-10-23 12:05:14,546] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=10.00
+[2026-10-23 12:05:14,543] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=10.18
+[2026-10-23 12:05:14,539] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=11.78
+[2026-10-23 12:05:05,805] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=74.67
+[2026-10-23 12:05:05,795] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=17.77
+[2026-10-23 12:05:05,794] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=12.71
+[2026-10-23 12:05:05,788] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=14.30
+[2026-10-23 12:05:05,762] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=22.75
+[2026-10-23 12:05:05,749] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=14.84
+[2026-10-23 12:05:05,747] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=17.64
+[2026-10-23 12:01:17,391] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=61.22
+[2026-10-23 12:01:17,387] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=13.19
+[2026-10-23 12:01:17,385] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=13.41
+[2026-10-23 12:01:17,383] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=12.83
+[2026-10-23 12:01:17,359] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=11.16
+[2026-10-23 12:01:17,356] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=18.95
+[2026-10-23 12:01:17,351] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=23.38
+[2026-10-23 11:51:24,155] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=61.40
+[2026-10-23 11:51:24,139] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=14.24
+[2026-10-23 11:51:24,139] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=14.68
+[2026-10-23 11:51:24,139] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=12.92
+[2026-10-23 11:51:24,114] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=13.05
+[2026-10-23 11:51:24,109] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=13.69
+[2026-10-23 11:51:24,108] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=15.87
+[2026-10-23 11:50:42,879] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=54.16
+[2026-10-23 11:50:42,879] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=11.67
+[2026-10-23 11:50:42,879] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=16.03
+[2026-10-23 11:50:42,878] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=10.00
+[2026-10-23 11:50:42,854] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=11.55
+[2026-10-23 11:50:42,849] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=9.33
+[2026-10-23 11:50:42,819] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=8.25
+[2026-10-23 11:50:32,343] WARNING event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=unknown status=401 duration_ms=4.98
+[2026-10-23 11:50:32,334] WARNING event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=unknown status=401 duration_ms=0.54
+[2026-10-23 11:50:32,334] WARNING event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=unknown status=401 duration_ms=0.96
+[2026-10-23 11:50:32,294] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=65.94
+[2026-10-23 11:50:32,279] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=10.73
+[2026-10-23 11:50:32,260] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=13.90
+[2026-10-23 11:50:32,256] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=11.16
+[2026-10-23 11:50:32,255] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=12.01
+[2026-10-23 11:50:32,254] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=15.77
+[2026-10-23 11:50:32,252] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=10.57
+[2026-10-23 11:50:29,181] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=60.55
+[2026-10-23 11:50:29,181] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=8.40
+[2026-10-23 11:50:29,178] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=13.53
+[2026-10-23 11:50:29,173] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=14.19
+[2026-10-23 11:50:29,163] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=12.69
+[2026-10-23 11:50:29,147] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=14.30
+[2026-10-23 11:50:29,147] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=10.87
+[2026-10-23 11:50:29,141] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=15.16
+[2026-10-23 11:50:29,140] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=12.57
+[2026-10-23 11:50:29,124] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=11.00
+[2026-10-23 11:47:25,972] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=11.41
+[2026-10-23 11:47:25,972] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=12.74
+[2026-10-23 11:47:25,972] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=69.92
+[2026-10-23 11:47:25,972] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=11.40
+[2026-10-23 11:47:25,940] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=13.64
+[2026-10-23 11:47:25,922] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=23.52
+[2026-10-23 11:47:25,921] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=15.81
+[2026-10-23 11:47:25,921] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=10.75
+[2026-10-23 11:47:25,919] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=18.54
+[2026-10-23 11:47:25,912] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=19.34
+[2026-10-23 11:47:24,479] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=77.93
+[2026-10-23 11:47:24,470] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=15.24
+[2026-10-23 11:47:24,468] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=15.88
+[2026-10-23 11:47:24,458] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=15.25
+[2026-10-23 11:47:24,432] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=12.23
+[2026-10-23 11:47:24,424] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=16.67
+[2026-10-23 11:47:24,423] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=18.55
+[2026-10-23 11:47:24,415] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=16.59
+[2026-10-23 11:47:24,414] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=20.85
+[2026-10-23 11:47:24,404] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=16.27
+[2026-10-23 11:46:54,595] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=62.07
+[2026-10-23 11:46:54,595] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=10.41
+[2026-10-23 11:46:54,585] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=12.04
+[2026-10-23 11:46:54,579] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=11.10
+[2026-10-23 11:46:54,567] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=10.38
+[2026-10-23 11:46:54,556] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=15.89
+[2026-10-23 11:46:54,552] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=14.85
+[2026-10-23 11:46:54,547] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=12.46
+[2026-10-23 11:46:54,546] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=10.39
+[2026-10-23 11:46:54,540] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=14.14
+[2026-10-23 11:46:48,742] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=71.22
+[2026-10-23 11:46:48,724] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=12.11
+[2026-10-23 11:46:48,724] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=17.41
+[2026-10-23 11:46:48,724] INFO event=api.request method=GET endpoint=api/batches/(?P<pk>[^/.]+)/leads/$ actor_id=1 status=200 duration_ms=15.62
+[2026-10-23 11:46:48,701] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=17.00
+[2026-10-23 11:46:48,698] INFO event=api.request method=GET endpoint=api/email-templates/$ actor_id=1 status=200 duration_ms=15.47
+[2026-10-23 11:46:48,695] INFO event=api.request method=GET endpoint=api/email-sequences/$ actor_id=1 status=200 duration_ms=16.64
+[2026-10-23 11:46:48,692] INFO event=api.request method=GET endpoint=api/sequence-steps/$ actor_id=1 status=200 duration_ms=10.81
+[2026-10-23 11:46:48,687] INFO event=api.request method=GET endpoint=api/batches/$ actor_id=1 status=200 duration_ms=12.64
+[2026-10-23 11:46:47,335] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=45.47
+[2026-10-23 11:46:47,296] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=8.45
+[2026-10-23 11:46:09,471] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=40.54
+[2026-10-23 11:46:09,439] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=10.86
 [2026-10-23 11:43:17,055] INFO event=api.request method=GET endpoint=api/leads/ actor_id=1 status=200 duration_ms=39.41
 [2026-10-23 11:43:15,055] INFO event=api.request method=GET endpoint=api/leads/<int:pk>/ actor_id=1 status=200 duration_ms=13.92
 [2026-10-23 11:43:15,047] INFO event=api.request method=GET endpoint=api/email-logs/ actor_id=1 status=200 duration_ms=11.95

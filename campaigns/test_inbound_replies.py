@@ -51,7 +51,7 @@ class InboundReplyWebhookTests(TestCase):
             **values,
         }
 
-    def test_valid_reply_saves_bodies_matches_lead_and_updates_message_status(self):
+    def test_valid_reply_discards_content_matches_lead_and_updates_message_status(self):
         response = self.client.post(
             reverse("mailgun-inbound-webhook"),
             self.signed_payload(
@@ -72,8 +72,9 @@ class InboundReplyWebhookTests(TestCase):
         self.assertEqual(reply.batch_lead, self.batch_lead)
         self.assertEqual(reply.sender_email, "morgan@example.com")
         self.assertEqual(reply.recipient_email, "replies@example.com")
-        self.assertEqual(reply.body_plain, "Thanks, please send more details.")
-        self.assertEqual(reply.body_html, "<p>Thanks, please send more details.</p>")
+        self.assertEqual(reply.subject, "")
+        self.assertEqual(reply.body_plain, "")
+        self.assertEqual(reply.body_html, "")
         self.assertEqual(reply.message_id, "<reply-123@example.com>")
         self.assertEqual(
             reply.message_id_hash,
@@ -120,7 +121,9 @@ class InboundReplyWebhookTests(TestCase):
         self.assertEqual(response.json()["status"], "ignored")
         reply = InboundReply.objects.get()
         self.assertIsNone(reply.batch_lead)
-        self.assertEqual(reply.body_plain, "Can you help me?")
+        self.assertEqual(reply.subject, "")
+        self.assertEqual(reply.body_plain, "")
+        self.assertEqual(reply.body_html, "")
 
     def test_duplicate_delivery_does_not_create_another_reply(self):
         payload = self.signed_payload(
@@ -136,6 +139,35 @@ class InboundReplyWebhookTests(TestCase):
         self.assertEqual(first_response.status_code, 200)
         self.assertEqual(second_response.status_code, 200)
         self.assertEqual(InboundReply.objects.count(), 1)
+        self.message_log.refresh_from_db()
+        self.assertEqual(self.message_log.status, MessageLog.Status.REPLIED)
+
+    def test_late_mailgun_delivery_event_does_not_overwrite_replied_status(self):
+        self.message_log.status = MessageLog.Status.REPLIED
+        self.message_log.save(update_fields=["status"])
+        response = self.client.post(
+            reverse("mailgun-webhook"),
+            {
+                "signature": {
+                    "timestamp": "1790000000",
+                    "token": "unique-webhook-token",
+                    "signature": hmac.new(
+                        SIGNING_KEY.encode(),
+                        b"1790000000unique-webhook-token",
+                        hashlib.sha256,
+                    ).hexdigest(),
+                },
+                "event-data": {
+                    "event": "delivered",
+                    "recipient": self.lead.email,
+                    "message": {"headers": {}},
+                },
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "unchanged")
         self.message_log.refresh_from_db()
         self.assertEqual(self.message_log.status, MessageLog.Status.REPLIED)
 
@@ -208,8 +240,11 @@ class InboundReplyApiTests(TestCase):
         )
         self.assertEqual(list_response.data[0]["lead"]["id"], self.lead.pk)
         self.assertEqual(list_response.data[0]["campaign"]["id"], self.batch.pk)
+        self.assertEqual(list_response.data[0]["status"], MessageLog.Status.REPLIED)
         self.assertEqual(detail_response.status_code, 200)
-        self.assertEqual(detail_response.data["body_plain"], "Reply body")
+        self.assertNotIn("body_plain", detail_response.data)
+        self.assertNotIn("body_html", detail_response.data)
+        self.assertNotIn("subject", detail_response.data)
 
     def test_list_filters_by_lead_and_batch(self):
         self.client.force_authenticate(user=self.user)

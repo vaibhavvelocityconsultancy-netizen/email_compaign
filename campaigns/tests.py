@@ -35,6 +35,98 @@ from .models import (
     Task,
 )
 from .serializers import LeadSerializer
+from .unsubscribe import get_unsubscribe_url
+
+
+class LeadSampleDataApiTests(TestCase):
+	def setUp(self):
+		user = get_user_model().objects.create_user(
+			username="sample-lead-test",
+			email="sample-lead-test@example.com",
+			password="test-password",
+		)
+		self.client = APIClient()
+		self.client.force_authenticate(user=user)
+
+	def test_template_download_seed_endpoint_is_idempotent(self):
+		first_response = self.client.post("/api/leads/sample-data/")
+		second_response = self.client.post("/api/leads/sample-data/")
+
+		self.assertEqual(first_response.status_code, 200)
+		self.assertEqual(first_response.data, {"created": 3, "existing": 0})
+		self.assertEqual(second_response.status_code, 200)
+		self.assertEqual(second_response.data, {"created": 0, "existing": 3})
+		self.assertEqual(Lead.objects.count(), 3)
+
+	def test_csv_import_skips_seeded_sample_leads_as_duplicates(self):
+		self.client.post("/api/leads/sample-data/")
+		csv_file = SimpleUploadedFile(
+			"lead-import.csv",
+			b"contact_email\nAarav.Mehta@example.com\n",
+			content_type="text/csv",
+		)
+
+		response = self.client.post(
+			"/api/leads/import-csv/",
+			{"file": csv_file},
+			format="multipart",
+		)
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(response.data["duplicates"], 1)
+		self.assertEqual(response.data["imported"], 0)
+		self.assertEqual(Lead.objects.count(), 3)
+
+	def test_csv_import_reimports_leads_after_soft_delete(self):
+		self.client.post("/api/leads/sample-data/")
+		Lead.objects.update(is_active=False)
+		csv_file = SimpleUploadedFile(
+			"lead-import.csv",
+			(
+				b"contact_email\n"
+				b"aarav.mehta@example.com\n"
+				b"diya.sharma@example.com\n"
+				b"kabir.patel@example.com\n"
+			),
+			content_type="text/csv",
+		)
+
+		response = self.client.post(
+			"/api/leads/import-csv/",
+			{"file": csv_file},
+			format="multipart",
+		)
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(response.data["total_rows"], 3)
+		self.assertEqual(response.data["imported"], 3)
+		self.assertEqual(response.data["duplicates"], 0)
+		self.assertEqual(response.data["invalid"], 0)
+		self.assertEqual(Lead.objects.filter(is_active=True).count(), 3)
+
+	def test_delete_lead_permanently_removes_it_and_allows_reimport(self):
+		self.client.post("/api/leads/sample-data/")
+		lead = Lead.objects.get(contact__email="aarav.mehta@example.com")
+
+		delete_response = self.client.delete(f"/api/leads/{lead.pk}/")
+
+		self.assertEqual(delete_response.status_code, 204)
+		self.assertFalse(Lead.objects.filter(pk=lead.pk).exists())
+		csv_file = SimpleUploadedFile(
+			"lead-import.csv",
+			b"contact_email\nAarav.Mehta@example.com\n",
+			content_type="text/csv",
+		)
+		import_response = self.client.post(
+			"/api/leads/import-csv/",
+			{"file": csv_file},
+			format="multipart",
+		)
+
+		self.assertEqual(import_response.status_code, 201, import_response.data)
+		self.assertEqual(import_response.data["imported"], 1)
+		self.assertEqual(import_response.data["duplicates"], 0)
+		self.assertEqual(Lead.objects.filter(is_active=True).count(), 3)
 
 
 class MessageLogListViewTests(TestCase):
@@ -133,6 +225,169 @@ class CampaignSendNowApiTests(TestCase):
 
 		self.assertEqual(response.status_code, 400)
 		self.assertIn("Resume this campaign", response.data["detail"])
+
+	@patch("campaigns.views.call_command")
+	def test_one_time_campaign_sends_selected_template_without_sequence(self, call_command_mock):
+		def write_success(_command, **options):
+			options["stdout"].write("Sent to recipient@example.com - Step 1\n")
+
+		call_command_mock.side_effect = write_success
+		template = MessageTemplate.objects.create(
+			name="One-time template",
+			subject="Hello",
+			body="Hello there.",
+		)
+		self.lead.enquiry_date = date(2026, 10, 22)
+		self.lead.save(update_fields=["enquiry_date"])
+		batch = Batch.objects.create(name="One-time campaign")
+		BatchLead.objects.create(batch=batch, lead=self.lead, email=self.lead.email)
+
+		response = self.client.post(
+			f"/api/batches/{batch.pk}/send-now/",
+			{"template": template.pk, "enquiry_date": "2026-10-22"},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertEqual(response.data, {"sent": 1, "failed": 0})
+		batch.refresh_from_db()
+		self.assertIsNotNone(batch.sequence_id)
+		self.assertEqual(
+			call_command_mock.call_args.kwargs["template_id"], template.pk
+		)
+		self.assertEqual(
+			call_command_mock.call_args.kwargs["enquiry_date"], "2026-10-22"
+		)
+
+	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+	@patch("campaigns.management.commands.process_email_campaign.save_to_sent")
+	def test_send_enquiry_date_does_not_filter_campaign_recipients(self, _save_to_sent):
+		from django.core import mail
+
+		template = MessageTemplate.objects.create(
+			name="Date-independent template",
+			subject="Hello",
+			body="Hello {{name}}, enquiry date {{enquiry_date}}.",
+		)
+		SequenceStep.objects.create(
+			sequence=self.sequence,
+			step_number=1,
+			template=template,
+		)
+		self.lead.enquiry_date = date(2026, 10, 16)
+		self.lead.save(update_fields=["enquiry_date"])
+		other_lead = Lead.objects.create(
+			name="Other recipient",
+			email="other@example.com",
+			enquiry_date=date(2026, 10, 19),
+		)
+		BatchLead.objects.create(
+			batch=self.batch,
+			lead=other_lead,
+			email=other_lead.email,
+		)
+
+		response = self.client.post(
+			f"/api/batches/{self.batch.pk}/send-now/",
+			{"template": template.pk, "enquiry_date": "2026-10-22"},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertEqual(response.data["sent"], 2)
+		self.assertEqual(len(mail.outbox), 2)
+		self.assertTrue(all("2026-10-22" in message.body for message in mail.outbox))
+
+	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+	@patch("campaigns.management.commands.process_email_campaign.save_to_sent")
+	def test_first_step_with_zero_delay_sends_immediately(self, _save_to_sent):
+		template = MessageTemplate.objects.create(
+			name="First step",
+			subject="First",
+			body="First email",
+		)
+		SequenceStep.objects.create(
+			sequence=self.sequence,
+			step_number=1,
+			template=template,
+			delay_days=0,
+			delay_minutes=0,
+		)
+
+		call_command(
+			"process_email_campaign",
+			batch_id=self.batch.pk,
+			batch_lead_id=self.batch_lead.pk,
+			stdout=io.StringIO(),
+		)
+
+		from django.core import mail
+
+		self.assertEqual(len(mail.outbox), 1)
+		self.assertIn(
+			f'href="{get_unsubscribe_url(self.batch_lead)}"',
+			mail.outbox[0].body,
+		)
+		self.assertIn("unsubscribe here", mail.outbox[0].body)
+
+	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+	@patch("campaigns.management.commands.process_email_campaign.save_to_sent")
+	def test_send_uses_current_lead_email_when_campaign_recipient_email_is_blank(
+		self, _save_to_sent
+	):
+		from django.core import mail
+
+		template = MessageTemplate.objects.create(
+			name="Current lead email",
+			subject="Hello",
+			body="Hello there.",
+		)
+		SequenceStep.objects.create(
+			sequence=self.sequence,
+			step_number=1,
+			template=template,
+		)
+		self.batch_lead.email = ""
+		self.batch_lead.save(update_fields=["email"])
+
+		call_command(
+			"process_email_campaign",
+			batch_id=self.batch.pk,
+			batch_lead_id=self.batch_lead.pk,
+			stdout=io.StringIO(),
+		)
+
+		self.assertEqual(len(mail.outbox), 1)
+		self.assertEqual(mail.outbox[0].to, [self.lead.email])
+		self.batch_lead.refresh_from_db()
+		self.assertEqual(self.batch_lead.email, self.lead.email)
+
+	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+	@patch("campaigns.management.commands.process_email_campaign.save_to_sent")
+	def test_first_step_respects_delay_minutes(self, _save_to_sent):
+		template = MessageTemplate.objects.create(
+			name="First step",
+			subject="First",
+			body="First email",
+		)
+		SequenceStep.objects.create(
+			sequence=self.sequence,
+			step_number=1,
+			template=template,
+			delay_days=0,
+			delay_minutes=10,
+		)
+
+		call_command(
+			"process_email_campaign",
+			batch_id=self.batch.pk,
+			batch_lead_id=self.batch_lead.pk,
+			stdout=io.StringIO(),
+		)
+
+		from django.core import mail
+
+		self.assertEqual(len(mail.outbox), 0)
 
 	@override_settings(
 		EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
@@ -562,6 +817,150 @@ class LeadSerializerTests(TestCase):
         self.assertTrue(CompanyContact.objects.filter(name="Nitin Shah").exists())
         self.assertTrue(CompanyContact.objects.filter(name="Priya Nair").exists())
 
+    def test_csv_import_accepts_missing_columns_and_values(self):
+        client = APIClient()
+        user = get_user_model().objects.create_user(
+            username="partialimporter",
+            email="partialimporter@example.com",
+            password="test-password",
+        )
+        client.force_authenticate(user=user)
+
+        response = client.post(
+            "/api/leads/import-csv/",
+            {
+                "file": SimpleUploadedFile(
+                    "partial-leads.csv",
+                    (
+                        b"company_name,contact_name,followup_remarks\n"
+                        b"Acme Labs,,\n"
+                        b",,Needs company lookup\n"
+                    ),
+                    content_type="text/csv",
+                )
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["imported"], 2)
+        self.assertEqual(response.data["invalid"], 0)
+        lead = Lead.objects.get(company__name="Acme Labs")
+        self.assertEqual(lead.company.name, "Acme Labs")
+        self.assertEqual(lead.enquiry_date, timezone.localdate())
+        self.assertEqual(lead.source, "OTHER")
+        self.assertEqual(lead.status, "OTHER")
+        standalone_lead = Lead.objects.get(company__isnull=True)
+        self.assertEqual(standalone_lead.followup_remarks, "Needs company lookup")
+        self.assertEqual(standalone_lead.enquiry_date, timezone.localdate())
+
+    def test_csv_import_detects_tab_delimited_file(self):
+        client = APIClient()
+        user = get_user_model().objects.create_user(
+            username="tabimporter",
+            email="tabimporter@example.com",
+            password="test-password",
+        )
+        client.force_authenticate(user=user)
+
+        response = client.post(
+            "/api/leads/import-csv/",
+            {
+                "file": SimpleUploadedFile(
+                    "tab-leads.csv",
+                    (
+                        "company_name\tcontact_email\tcontact_mobile\n"
+                        "Testting\tTEST@GMAIL.COM\t1234567890\n"
+                    ).encode("utf-8"),
+                    content_type="text/csv",
+                )
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["imported"], 1)
+        lead = Lead.objects.get(company__name="Testting")
+        self.assertIsNone(lead.contact)
+        self.assertEqual(lead.email, "TEST@GMAIL.COM")
+        self.assertEqual(lead.phone, "1234567890")
+        self.assertEqual(lead.enquiry_date, timezone.localdate())
+
+    def test_csv_import_accepts_day_month_year_dates_and_defaults_unknown_values(self):
+        client = APIClient()
+        user = get_user_model().objects.create_user(
+            username="datedimporter",
+            email="datedimporter@example.com",
+            password="test-password",
+        )
+        client.force_authenticate(user=user)
+
+        response = client.post(
+            "/api/leads/import-csv/",
+            {
+                "file": SimpleUploadedFile(
+                    "dated-leads.csv",
+                    (
+                        b"company_name,enquiry_date,source,status,followup_date\n"
+                        b"Acme,22-10-2026,OTHER,Active,11-11-2026\n"
+                        b"Beta,22-10-2026,test,Active,11-11-2026\n"
+                    ),
+                    content_type="text/csv",
+                )
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["imported"], 2)
+        self.assertEqual(response.data["invalid"], 0)
+        self.assertEqual(response.data["row_errors"], [])
+        lead = Lead.objects.get(company__name="Acme")
+        self.assertEqual(str(lead.enquiry_date), "2026-10-22")
+        self.assertEqual(str(lead.followup_date), "2026-11-11")
+        self.assertEqual(lead.status, "ACTIVE")
+        unknown_source_lead = Lead.objects.get(company__name="Beta")
+        self.assertEqual(unknown_source_lead.source, "OTHER")
+        self.assertEqual(unknown_source_lead.status, "ACTIVE")
+
+    def test_xlsx_import_accepts_excel_dates_and_defaults_blank_source_and_status(self):
+        from openpyxl import Workbook
+
+        client = APIClient()
+        user = get_user_model().objects.create_user(
+            username="excelimporter",
+            email="excelimporter@example.com",
+            password="test-password",
+        )
+        client.force_authenticate(user=user)
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["company_name", "enquiry_date", "followup_date", "source", "status"])
+        sheet.append(["Excel Company", date(2026, 10, 22), date(2026, 11, 11), "", ""])
+        excel_file = io.BytesIO()
+        workbook.save(excel_file)
+
+        response = client.post(
+            "/api/leads/import-csv/",
+            {
+                "file": SimpleUploadedFile(
+                    "leads.xlsx",
+                    excel_file.getvalue(),
+                    content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["imported"], 1)
+        lead = Lead.objects.get(company__name="Excel Company")
+        self.assertEqual(str(lead.enquiry_date), "2026-10-22")
+        self.assertEqual(str(lead.followup_date), "2026-11-11")
+        self.assertEqual(lead.source, "OTHER")
+        self.assertEqual(lead.status, "OTHER")
+
 
 class OpportunityConversionTests(TestCase):
     def setUp(self):
@@ -718,6 +1117,31 @@ class CampaignSequenceAPITests(TestCase):
 			).exists()
 		)
 
+	def test_creates_campaign_without_sequence(self):
+		user = get_user_model().objects.create_user(
+			username="campaign-without-sequence",
+			email="campaign-without-sequence@example.com",
+			password="test-password",
+		)
+		self.client.force_authenticate(user=user)
+		response = self.client.post(
+			"/api/batches/",
+			{
+				"name": "One-time campaign",
+				"lead_ids": [self.lead.sr_no],
+			},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertIsNone(response.data["sequence"])
+		self.assertTrue(
+			BatchLead.objects.filter(
+				batch_id=response.data["id"],
+				lead=self.lead,
+			).exists()
+		)
+
 	def test_allows_whatsapp_only_lead_with_opt_in(self):
 		lead = Lead.objects.create(
 			name="Asha Example",
@@ -728,6 +1152,122 @@ class CampaignSequenceAPITests(TestCase):
 
 		self.assertIsNone(lead.email)
 		self.assertTrue(lead.whatsapp_opt_in)
+
+
+@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+class CampaignAutomaticProcessingTests(TestCase):
+	def setUp(self):
+		self.user = get_user_model().objects.create_user(
+			username="automatic-campaign-user",
+			email="automatic-campaign@example.com",
+			password="automatic-campaign-test-password",
+		)
+		self.client = APIClient()
+		self.client.force_authenticate(user=self.user)
+		self.template = MessageTemplate.objects.create(
+			name="Immediate welcome",
+			subject="Welcome",
+			body="Welcome aboard.",
+		)
+		self.sequence = Sequence.objects.create(name="Immediate welcome sequence")
+		self.step = SequenceStep.objects.create(
+			sequence=self.sequence,
+			step_number=1,
+			template=self.template,
+			delay_days=0,
+			delay_minutes=0,
+		)
+		self.lead = Lead.objects.create(
+			name="Immediate recipient",
+			email="immediate@example.com",
+		)
+
+	def create_campaign(self, *, status_value=Batch.Status.ACTIVE, lead_ids=None):
+		return self.client.post(
+			"/api/batches/",
+			{
+				"name": "Immediate campaign",
+				"sequence": self.sequence.pk,
+				"lead_ids": [self.lead.pk] if lead_ids is None else lead_ids,
+				"status": status_value,
+			},
+			format="json",
+		)
+
+	@patch("campaigns.management.commands.process_email_campaign.save_to_sent")
+	def test_campaign_creation_sends_after_batch_leads_are_saved(self, _save_to_sent):
+		from django.core import mail
+
+		with self.captureOnCommitCallbacks(execute=True) as callbacks:
+			response = self.create_campaign()
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(len(callbacks), 1)
+		batch_lead = BatchLead.objects.get(batch_id=response.data["id"])
+		self.assertEqual(batch_lead.email, self.lead.email)
+		self.assertEqual(len(mail.outbox), 1)
+		self.assertEqual(mail.outbox[0].to, [self.lead.email])
+		self.assertEqual(batch_lead.current_step, 1)
+
+	@patch("campaigns.management.commands.process_email_campaign.save_to_sent")
+	def test_resume_sends_immediate_first_step(self, _save_to_sent):
+		from django.core import mail
+
+		with self.captureOnCommitCallbacks(execute=True):
+			response = self.create_campaign(status_value=Batch.Status.PAUSED)
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(mail.outbox, [])
+
+		with self.captureOnCommitCallbacks(execute=True) as callbacks:
+			resume_response = self.client.patch(
+				f"/api/batches/{response.data['id']}/resume/"
+			)
+
+		self.assertEqual(resume_response.status_code, 200, resume_response.data)
+		self.assertEqual(len(callbacks), 1)
+		self.assertEqual(len(mail.outbox), 1)
+
+	@patch("campaigns.management.commands.process_email_campaign.save_to_sent")
+	def test_campaign_creation_does_not_send_before_nonzero_first_step_delay(
+		self, _save_to_sent
+	):
+		from django.core import mail
+
+		self.step.delay_minutes = 10
+		self.step.save(update_fields=["delay_minutes"])
+
+		with self.captureOnCommitCallbacks(execute=True):
+			response = self.create_campaign()
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertTrue(BatchLead.objects.filter(batch_id=response.data["id"]).exists())
+		self.assertEqual(mail.outbox, [])
+
+	@patch("campaigns.management.commands.process_email_campaign.save_to_sent")
+	def test_campaign_without_recipients_is_logged_and_sends_nothing(
+		self, _save_to_sent
+	):
+		from django.core import mail
+
+		with self.assertLogs(
+			"campaigns.management.commands.process_email_campaign", level="WARNING"
+		):
+			with self.captureOnCommitCallbacks(execute=True):
+				response = self.create_campaign(lead_ids=[])
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertFalse(BatchLead.objects.filter(batch_id=response.data["id"]).exists())
+		self.assertEqual(mail.outbox, [])
+
+	@patch("campaigns.management.commands.process_email_campaign.save_to_sent")
+	def test_reprocessing_does_not_send_a_completed_first_step_twice(self, _save_to_sent):
+		from django.core import mail
+
+		with self.captureOnCommitCallbacks(execute=True):
+			response = self.create_campaign()
+		self.assertEqual(response.status_code, 201, response.data)
+		call_command("process_email_campaign", batch_id=response.data["id"])
+		self.assertEqual(len(mail.outbox), 1)
 
 
 class OrderDashboardAPITests(TestCase):
