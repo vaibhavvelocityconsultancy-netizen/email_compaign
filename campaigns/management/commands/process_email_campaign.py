@@ -10,6 +10,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.core.mail import EmailMultiAlternatives
 from django.db import transaction
+from django.utils.html import format_html
 from django.utils import timezone
 
 from campaigns.models import Batch, BatchLead, Channel, EmailLog, MessageTemplate
@@ -477,6 +478,12 @@ class Command(BaseCommand):
                             )
 
                     unsubscribe_url = get_unsubscribe_url(batch_lead)
+                    body += format_html(
+                        '<br><br><p style="color:#666;font-size:12px;">'
+                        'If you no longer want to receive these emails, '
+                        '<a href="{}">unsubscribe here</a>.</p>',
+                        unsubscribe_url,
+                    )
                     # --------------------------------
                     # CREATE EMAIL
                     # --------------------------------
