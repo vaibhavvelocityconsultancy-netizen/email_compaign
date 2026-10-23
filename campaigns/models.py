@@ -409,7 +409,21 @@ class InboundReply(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.sender_email} - {self.subject}"
+        return f"{self.sender_email} - {self.received_at}"
+
+
+class GmailMailbox(models.Model):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    email = models.EmailField(blank=True)
+    encrypted_credentials = models.TextField(blank=True)
+    history_id = models.CharField(max_length=64, blank=True)
+    last_sync_at = models.DateTimeField(null=True, blank=True)
+    oauth_state_hash = models.CharField(max_length=64, blank=True)
+    oauth_state_created_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.email or "Connected Gmail mailbox"
 
 
 EmailLog = MessageLog

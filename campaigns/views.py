@@ -2062,6 +2062,21 @@ def mailgun_webhook(request):
                 {"status": "not_found", "event": event, "recipient": recipient}
             )
 
+        if email_log.status == MessageLog.Status.REPLIED:
+            email_campaign_logger.info(
+                "event=mailgun_status.ignored message_log_id=%s event_type=%s reason=already_replied",
+                email_log.pk,
+                event,
+            )
+            return JsonResponse(
+                {
+                    "status": "unchanged",
+                    "event": event,
+                    "message_log_id": email_log.pk,
+                    "message_status": MessageLog.Status.REPLIED,
+                }
+            )
+
         # Update status
         email_log.status = new_status
         email_log.save(update_fields=["status"])
@@ -2123,9 +2138,6 @@ def mailgun_inbound_webhook(request):
     try:
         sender = request.POST.get("sender", "").strip().lower()
         recipient = request.POST.get("recipient", "").strip().lower()
-        subject = request.POST.get("subject", "")
-        body_plain = request.POST.get("body-plain", "")
-        body_html = request.POST.get("body-html", "")
         message_id = (
             request.POST.get("Message-Id")
             or request.POST.get("message-id")
@@ -2139,9 +2151,6 @@ def mailgun_inbound_webhook(request):
             "batch_lead": batch_lead,
             "sender_email": sender,
             "recipient_email": recipient,
-            "subject": subject,
-            "body_plain": body_plain,
-            "body_html": body_html,
             "received_at": timezone.now(),
         }
         if message_id:

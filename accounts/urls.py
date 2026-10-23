@@ -3,6 +3,8 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     CurrentUserView,
+    GoogleAuthorizationView,
+    GoogleCallbackView,
     LoginView,
     LogoutView,
     ModuleViewSet,
@@ -27,4 +29,6 @@ urlpatterns = [
     path("refresh/", RefreshView.as_view(), name="refresh"),
     path("logout/", LogoutView.as_view(), name="logout"),
     path("me/", CurrentUserView.as_view(), name="me"),
+    path("google/authorize/", GoogleAuthorizationView.as_view(), name="google-authorize"),
+    path("google/callback/", GoogleCallbackView.as_view(), name="google-callback"),
 ] + router.urls

@@ -639,24 +639,22 @@ class MessageLogSerializer(serializers.ModelSerializer):
 class InboundReplySerializer(serializers.ModelSerializer):
     lead = serializers.SerializerMethodField()
     campaign = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
 
     class Meta:
         model = InboundReply
         fields = [
             "id",
-            "batch_lead",
+            "status",
             "sender_email",
-            "recipient_email",
-            "subject",
-            "body_plain",
-            "body_html",
-            "message_id",
             "received_at",
-            "created_at",
             "lead",
             "campaign",
         ]
         read_only_fields = fields
+
+    def get_status(self, reply):
+        return MessageLog.Status.REPLIED
 
     def get_lead(self, reply):
         if reply.batch_lead_id is None:

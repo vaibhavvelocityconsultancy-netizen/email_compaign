@@ -18,3 +18,6 @@ sqlparse==0.6.0
 tzdata==2026.4
 urllib3==2.8.0
 reportlab
+cryptography>=38.0.3
+google-api-python-client>=2.0,<3
+google-auth-oauthlib>=1.2,<2
