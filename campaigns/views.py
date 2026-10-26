@@ -2033,7 +2033,256 @@ class BatchViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
 
 
 # webhook
+@csrf_exempt
+def mailgun_webhook(request):
+    if request.method != "POST":
+        return JsonResponse(
+            {"error": "POST method required"},
+            status=405,
+        )
 
+    try:
+        # Parse Mailgun event webhook JSON payload
+        data = json.loads(request.body)
+
+        # Safely extract signature information
+        signature_data = (
+            data.get("signature", {})
+            if isinstance(data, dict)
+            else {}
+        )
+
+        # Validate signature
+        signature_valid = _is_valid_mailgun_signature(signature_data)
+
+        # Diagnostic logging: never log the actual token, signature, or key
+        email_campaign_logger.info(
+            "event=mailgun_webhook.signature_check "
+            "payload_is_dict=%s signature_is_dict=%s "
+            "timestamp_present=%s token_present=%s "
+            "signature_present=%s valid=%s",
+            isinstance(data, dict),
+            isinstance(signature_data, dict),
+            bool(signature_data.get("timestamp"))
+            if isinstance(signature_data, dict)
+            else False,
+            bool(signature_data.get("token"))
+            if isinstance(signature_data, dict)
+            else False,
+            bool(signature_data.get("signature"))
+            if isinstance(signature_data, dict)
+            else False,
+            signature_valid,
+        )
+
+        if not signature_valid:
+            email_campaign_logger.warning(
+                "event=mailgun_webhook.rejected reason=invalid_signature"
+            )
+            return JsonResponse(
+                {"error": "Webhook signature is invalid."},
+                status=403,
+            )
+
+        # Extract event information
+        event_data = data.get("event-data", {})
+
+        if not isinstance(event_data, dict):
+            email_campaign_logger.warning(
+                "event=mailgun_webhook.rejected reason=invalid_event_data"
+            )
+            return JsonResponse(
+                {"error": "Invalid event-data payload."},
+                status=400,
+            )
+
+        event = event_data.get("event", "")
+        recipient = (
+            event_data.get("recipient", "").strip().lower()
+            if isinstance(event_data.get("recipient", ""), str)
+            else ""
+        )
+
+        email_campaign_logger.info(
+            "event=mailgun_webhook.received event_type=%s recipient_present=%s",
+            event,
+            bool(recipient),
+        )
+
+        # Mailgun event → MessageLog status
+        event_status_map = {
+            "accepted": MessageLog.Status.ACCEPTED,
+            "delivered": MessageLog.Status.DELIVERED,
+            "opened": MessageLog.Status.OPENED,
+            "clicked": MessageLog.Status.CLICKED,
+            "failed": MessageLog.Status.FAILED,
+            "complained": MessageLog.Status.COMPLAINED,
+            "unsubscribed": MessageLog.Status.UNSUBSCRIBED,
+        }
+
+        new_status = event_status_map.get(event)
+
+        if not new_status:
+            email_campaign_logger.info(
+                "event=mailgun_webhook.ignored event_type=%s reason=unhandled_event",
+                event,
+            )
+            return JsonResponse(
+                {
+                    "status": "ignored",
+                    "event": event,
+                    "message": "Event is not handled",
+                }
+            )
+
+        # Process unsubscribe events
+        if event == "unsubscribed":
+            if not recipient:
+                return JsonResponse(
+                    {"error": "Unsubscribe event has no recipient."},
+                    status=400,
+                )
+
+            recipient_batch_leads = BatchLead.objects.filter(
+                email__iexact=recipient
+            )
+
+            tenant_ids = list(
+                recipient_batch_leads.values_list(
+                    "batch__tenant_id",
+                    flat=True,
+                ).distinct()
+            )
+
+            if len(tenant_ids) == 1:
+                record_unsubscribe(
+                    recipient,
+                    tenant_id=tenant_ids[0],
+                )
+
+        # Match the Mailgun event to the existing email log
+        message_id = (
+            event_data.get("message", {})
+            .get("headers", {})
+            .get("message-id", "")
+        )
+
+        if isinstance(message_id, str):
+            message_id = message_id.strip().strip("<>").lower()
+        else:
+            message_id = ""
+
+        email_log = (
+            MessageLog.objects.filter(
+                channel=Channel.EMAIL,
+                provider_message_id=message_id,
+            ).first()
+            if message_id
+            else None
+        )
+
+        if not email_log:
+            if event == "unsubscribed":
+                email_campaign_logger.info(
+                    "event=mailgun_status.received "
+                    "event_type=%s status=suppressed",
+                    event,
+                )
+                return JsonResponse(
+                    {
+                        "status": "suppressed",
+                        "event": event,
+                    }
+                )
+
+            email_campaign_logger.warning(
+                "event=mailgun_status.unmatched "
+                "event_type=%s message_id_present=%s",
+                event,
+                bool(message_id),
+            )
+
+            return JsonResponse(
+                {
+                    "status": "not_found",
+                    "event": event,
+                    "recipient": recipient,
+                }
+            )
+
+        # Ensure unsubscribe is recorded against the matched tenant
+        if event == "unsubscribed" and recipient:
+            record_unsubscribe(
+                recipient,
+                tenant_id=email_log.batch_lead.batch.tenant_id,
+            )
+
+        # Do not overwrite a replied status
+        if email_log.status == MessageLog.Status.REPLIED:
+            email_campaign_logger.info(
+                "event=mailgun_status.ignored "
+                "message_log_id=%s event_type=%s reason=already_replied",
+                email_log.pk,
+                event,
+            )
+
+            return JsonResponse(
+                {
+                    "status": "unchanged",
+                    "event": event,
+                    "message_log_id": email_log.pk,
+                    "message_status": MessageLog.Status.REPLIED,
+                }
+            )
+
+        # Update the email log status
+        email_log.status = new_status
+        email_log.save(update_fields=["status"])
+
+        email_campaign_logger.info(
+            "event=mailgun_status.updated "
+            "message_log_id=%s event_type=%s status=%s",
+            email_log.pk,
+            event,
+            new_status,
+        )
+
+        return JsonResponse(
+            {
+                "status": "updated",
+                "event": event,
+                "recipient": recipient,
+                "email_log_id": email_log.id,
+                "message_log_id": email_log.id,
+                "message_status": new_status,
+            }
+        )
+
+    except json.JSONDecodeError:
+        email_campaign_logger.warning(
+            "event=mailgun_webhook.rejected reason=invalid_json"
+        )
+        return JsonResponse(
+            {
+                "status": "error",
+                "error": "Invalid JSON payload",
+            },
+            status=400,
+        )
+
+    except Exception:
+        logger.exception("Mailgun webhook failed.")
+        email_campaign_logger.exception(
+            "event=mailgun_webhook.failed"
+        )
+
+        return JsonResponse(
+            {
+                "status": "error",
+                "error": "Mailgun webhook processing failed.",
+            },
+            status=500,
+        )
 
 @csrf_exempt
 def campaign_unsubscribe(request, token):
