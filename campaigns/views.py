@@ -2124,6 +2124,7 @@ def _is_valid_mailgun_signature(signature_data):
         for signing_key in signing_keys
     )
 
+
 @csrf_exempt
 def mailgun_webhook(request):
     if request.method != "POST":
@@ -2374,6 +2375,7 @@ def mailgun_webhook(request):
             },
             status=500,
         )
+
 @csrf_exempt
 def mailgun_inbound_webhook(request):
     if request.method != "POST":
