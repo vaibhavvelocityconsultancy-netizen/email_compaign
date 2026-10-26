@@ -1,13 +1,17 @@
+from email.utils import parseaddr
+
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import validate_email
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.serializers import TokenBlacklistSerializer, TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Module, Role, RolePermission
+from .mailgun_secrets import encrypt_mailgun_secret
+from .models import Module, Role, RolePermission, Tenant, TenantMailgunSettings
 
 
 class RoleSerializer(serializers.ModelSerializer):
@@ -25,8 +29,106 @@ class ModuleSerializer(serializers.ModelSerializer):
 class UserInfoSerializer(serializers.ModelSerializer):
     class Meta:
         model = get_user_model()
-        fields = ("id", "username", "email", "first_name", "last_name")
+        fields = ("id", "username", "email", "first_name", "last_name", "is_superuser")
         read_only_fields = fields
+
+
+class TenantMailgunSettingsSerializer(serializers.ModelSerializer):
+    tenant_name = serializers.CharField(source="tenant.name", read_only=True)
+    has_api_key = serializers.SerializerMethodField()
+    has_webhook_signing_key = serializers.SerializerMethodField()
+    default_from_email = serializers.CharField(max_length=320)
+    api_key = serializers.CharField(write_only=True, required=False, allow_blank=False)
+    webhook_signing_key = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=False,
+    )
+
+    class Meta:
+        model = TenantMailgunSettings
+        fields = (
+            "tenant",
+            "tenant_name",
+            "default_from_email",
+            "sender_domain",
+            "api_key",
+            "webhook_signing_key",
+            "has_api_key",
+            "has_webhook_signing_key",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "tenant",
+            "tenant_name",
+            "has_api_key",
+            "has_webhook_signing_key",
+            "created_at",
+            "updated_at",
+        )
+
+    def get_has_api_key(self, instance):
+        return bool(instance.encrypted_api_key)
+
+    def get_has_webhook_signing_key(self, instance):
+        return bool(instance.encrypted_webhook_signing_key)
+
+    def validate_default_from_email(self, value):
+        if "\r" in value or "\n" in value:
+            raise serializers.ValidationError("Line breaks are not allowed.")
+        _, email_address = parseaddr(value)
+        try:
+            validate_email(email_address)
+        except DjangoValidationError as error:
+            raise serializers.ValidationError(
+                "Enter an email address, optionally with a display name."
+            ) from error
+        return value
+
+    def validate_sender_domain(self, value):
+        try:
+            validate_email(f"mailgun@{value}")
+        except DjangoValidationError as error:
+            raise serializers.ValidationError("Enter a valid Mailgun sender domain.") from error
+        return value
+
+    def validate(self, attrs):
+        if self.instance is None:
+            missing = [
+                field
+                for field in ("api_key", "webhook_signing_key")
+                if not attrs.get(field)
+            ]
+            if missing:
+                raise serializers.ValidationError({
+                    field: "This field is required when creating Mailgun settings."
+                    for field in missing
+                })
+        return attrs
+
+    def create(self, validated_data):
+        api_key = validated_data.pop("api_key")
+        webhook_signing_key = validated_data.pop("webhook_signing_key")
+        return TenantMailgunSettings.objects.create(
+            **validated_data,
+            encrypted_api_key=encrypt_mailgun_secret(api_key),
+            encrypted_webhook_signing_key=encrypt_mailgun_secret(webhook_signing_key),
+        )
+
+    def update(self, instance, validated_data):
+        api_key = validated_data.pop("api_key", None)
+        webhook_signing_key = validated_data.pop("webhook_signing_key", None)
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        if api_key is not None:
+            instance.encrypted_api_key = encrypt_mailgun_secret(api_key)
+        if webhook_signing_key is not None:
+            instance.encrypted_webhook_signing_key = encrypt_mailgun_secret(
+                webhook_signing_key
+            )
+        instance.save()
+        return instance
 
 
 class UserManagementSerializer(serializers.ModelSerializer):
@@ -167,11 +269,28 @@ class RegisterSerializer(serializers.Serializer):
     def create(self, validated_data):
         user_model = get_user_model()
         email = validated_data["email"]
+        role, _ = Role.objects.get_or_create(
+            code="admin",
+            defaults={"name": "Admin"},
+        )
+        tenant_name = " ".join(
+            part
+            for part in (
+                validated_data["first_name"],
+                validated_data["last_name"],
+            )
+            if part
+        )
+        validated_data["tenant"] = Tenant.objects.create(
+            name=tenant_name or email
+        )
         return user_model.objects.create_user(
             username=email,
             email=email,
             first_name=validated_data["first_name"],
             last_name=validated_data["last_name"],
+            tenant=validated_data["tenant"],
+            role=role,
             password=validated_data["password"],
         )
 

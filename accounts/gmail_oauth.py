@@ -14,9 +14,11 @@ from requests import RequestException
 
 from campaigns.models import GmailMailbox
 
-
-GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.metadata"
-
+GMAIL_SCOPES = [
+    "https://www.googleapis.com/auth/gmail.metadata",
+    "https://www.googleapis.com/auth/gmail.send",
+]
+GMAIL_SCOPE = " ".join(GMAIL_SCOPES)
 
 class GmailOAuthError(Exception):
     pass
@@ -66,35 +68,62 @@ def _flow(state=None, code_verifier=None):
         }
     }
 
-    flow = Flow.from_client_config(
+    return Flow.from_client_config(
         config,
-        scopes=[GMAIL_SCOPE],
+        scopes=GMAIL_SCOPES,
         state=state,
         redirect_uri=settings.GMAIL_OAUTH_REDIRECT_URI,
         code_verifier=code_verifier,
     )
 
-    return flow
-
-
 def create_gmail_authorization_url(state):
-    _fernet()
-    authorization_url, _ = _flow(state).authorization_url(
+    fernet = _fernet()
+    flow = _flow(state)
+    authorization_url, _ = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
         prompt="consent",
     )
-    return authorization_url
+
+    if not flow.code_verifier:
+        raise GmailOAuthError("Google did not generate a PKCE code verifier.")
+
+    encrypted_code_verifier = fernet.encrypt(
+        flow.code_verifier.encode("utf-8")
+    ).decode("ascii")
+    return authorization_url, encrypted_code_verifier
 
 
-def complete_gmail_oauth(code):
+def decrypt_gmail_oauth_code_verifier(encrypted_code_verifier):
+    if not encrypted_code_verifier:
+        raise GmailOAuthError(
+            "The OAuth code verifier is missing. Start authorization again."
+        )
+
+    try:
+        return _fernet().decrypt(
+            encrypted_code_verifier.encode("ascii")
+        ).decode("utf-8")
+    except (InvalidToken, UnicodeDecodeError, UnicodeEncodeError) as error:
+        raise GmailOAuthConfigurationError(
+            "The stored OAuth code verifier cannot be decrypted. "
+            "Check the token encryption key and authorize again."
+        ) from error
+
+
+def complete_gmail_oauth(code, code_verifier=None, mailbox=None):
     stage = "initialization"
 
     try:
         fernet = _fernet()
 
+        if not code_verifier:
+            raise GmailOAuthError(
+                "The OAuth code verifier is missing. Start authorization again."
+            )
+
         stage = "create OAuth flow"
-        flow = _flow()
+        flow = _flow(code_verifier=code_verifier)
 
         stage = "exchange authorization code"
         flow.fetch_token(code=code)
@@ -129,7 +158,10 @@ def complete_gmail_oauth(code):
         ).decode("ascii")
 
         stage = "save mailbox"
-        mailbox, _ = GmailMailbox.objects.get_or_create(pk=1)
+        if mailbox is None:
+            raise GmailOAuthError(
+                "The tenant mailbox could not be resolved. Start authorization again."
+            )
         mailbox.email = mailbox_email
         mailbox.encrypted_credentials = encrypted_credentials
         mailbox.history_id = history_id
@@ -174,7 +206,8 @@ def get_gmail_service(mailbox):
         ).decode("utf-8")
         credentials = Credentials.from_authorized_user_info(
             json.loads(credentials_json),
-            scopes=[GMAIL_SCOPE],
+            scopes=GMAIL_SCOPES,
+
         )
     except (
         InvalidToken,

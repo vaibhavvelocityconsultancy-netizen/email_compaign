@@ -5,12 +5,49 @@ from django.contrib.auth.models import (
     BaseUserManager,
 )
 
+
+class Tenant(models.Model):
+    name = models.CharField(max_length=300)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+
+class TenantMailgunSettings(models.Model):
+    tenant = models.OneToOneField(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="mailgun_settings",
+    )
+    default_from_email = models.CharField(max_length=320)
+    sender_domain = models.CharField(max_length=255)
+    encrypted_api_key = models.TextField(blank=True)
+    encrypted_webhook_signing_key = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Mailgun settings for {self.tenant}"
+
+
 class UserManager(BaseUserManager):
     def create_user(self, username, email, password=None, **extra_fields):
         if not email:
             raise ValueError("Email is required")
 
         email = self.normalize_email(email)
+
+        if extra_fields.get("tenant") is None:
+            full_name = " ".join(
+                part.strip()
+                for part in (
+                    extra_fields.get("first_name", ""),
+                    extra_fields.get("last_name", ""),
+                )
+                if part and part.strip()
+            )
+            extra_fields["tenant"] = Tenant.objects.create(name=full_name or email)
 
         user = self.model(
             username=username,
@@ -92,6 +129,14 @@ class User(AbstractBaseUser, PermissionsMixin):
         unique=True
     )
 
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.PROTECT,
+        related_name="users",
+        null=True,
+        blank=True,
+    )
+
     first_name = models.CharField(
         max_length=30,
         blank=True
@@ -118,6 +163,11 @@ class User(AbstractBaseUser, PermissionsMixin):
     USERNAME_FIELD = "username"
 
     REQUIRED_FIELDS = ["email"]
+
+    def save(self, *args, **kwargs):
+        if self.tenant_id is None:
+            self.tenant = Tenant.objects.create(name=self.get_full_name())
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.username

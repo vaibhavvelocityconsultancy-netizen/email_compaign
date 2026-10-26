@@ -45,6 +45,8 @@ import requests
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
+from accounts.mailgun_secrets import decrypt_mailgun_secret
+from accounts.models import TenantMailgunSettings
 
 from campaigns.serializers import (
     BatchLeadSerializer,
@@ -53,6 +55,7 @@ from campaigns.serializers import (
     CompanyContactSerializer,
     CompanySerializer,
     CountrySerializer,
+    EmailCampaignSettingsSerializer,
     MessageLogSerializer,
     SequenceSerializer,
     SequenceStepSerializer,
@@ -76,6 +79,7 @@ from .models import (
     Company,
     CompanyContact,
     Country,
+    EmailCampaignSettings,
     EmailSuppression,
     InboundReply,
     MessageLog,
@@ -102,6 +106,21 @@ from campaigns.unsubscribe import (
 
 logger = logging.getLogger(__name__)
 email_campaign_logger = logging.getLogger("email_campaign")
+
+
+def _tenant_queryset(queryset, request, tenant_path="tenant"):
+    tenant_id = getattr(request.user, "tenant_id", None)
+    if not tenant_id:
+        return queryset.none()
+    return queryset.filter(**{f"{tenant_path}_id": tenant_id})
+
+
+class TenantScopedViewSetMixin:
+    def get_queryset(self):
+        return _tenant_queryset(super().get_queryset(), self.request)
+
+    def perform_create(self, serializer):
+        serializer.save(tenant_id=self.request.user.tenant_id)
 
 
 def _campaign_actor_id(request):
@@ -140,17 +159,17 @@ def _spreadsheet_cell_value(value):
 # company
 
 
-class CountryViewSet(viewsets.ModelViewSet):
+class CountryViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
     queryset = Country.objects.all()
     serializer_class = CountrySerializer
 
 
-class StateViewSet(viewsets.ModelViewSet):
+class StateViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
     queryset = State.objects.all()
     serializer_class = StateSerializer
 
 
-class CityViewSet(viewsets.ModelViewSet):
+class CityViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
     queryset = City.objects.all()
     serializer_class = CitySerializer
 
@@ -158,7 +177,7 @@ class CityViewSet(viewsets.ModelViewSet):
 class CompanyListView(APIView):
     def get(self, request):
         companies = (
-            Company.objects.filter(is_active=True)
+            _tenant_queryset(Company.objects.filter(is_active=True), request)
             .annotate(
                 contacts_count=Count("contacts", filter=Q(contacts__is_active=True))
             )
@@ -172,9 +191,9 @@ class CompanyListView(APIView):
         )
 
     def post(self, request):
-        serializer = CompanySerializer(data=request.data)
+        serializer = CompanySerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        company = serializer.save()
+        company = serializer.save(tenant_id=request.user.tenant_id)
         company.contacts_count = 0
         return Response(CompanySerializer(company).data, status=status.HTTP_201_CREATED)
 
@@ -185,18 +204,21 @@ class CompanyDetailView(generics.RetrieveUpdateAPIView):
     )
     serializer_class = CompanySerializer
 
+    def get_queryset(self):
+        return _tenant_queryset(super().get_queryset(), self.request)
+
 
 class CompanyContactListCreateView(APIView):
     def get(self, request, company_id):
-        company = get_object_or_404(Company, pk=company_id, is_active=True)
+        company = get_object_or_404(_tenant_queryset(Company.objects.all(), request), pk=company_id, is_active=True)
         contacts = company.contacts.filter(is_active=True).order_by(
             "-is_primary", "name"
         )
         return Response(CompanyContactSerializer(contacts, many=True).data)
 
     def post(self, request, company_id):
-        company = get_object_or_404(Company, pk=company_id, is_active=True)
-        serializer = CompanyContactSerializer(data=request.data)
+        company = get_object_or_404(_tenant_queryset(Company.objects.all(), request), pk=company_id, is_active=True)
+        serializer = CompanyContactSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         return Response(
             CompanyContactSerializer(serializer.save(company=company)).data,
@@ -208,11 +230,11 @@ class CompanyContactDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = CompanyContactSerializer
 
     def get_queryset(self):
-        return CompanyContact.objects.filter(
+        return _tenant_queryset(CompanyContact.objects.filter(
             company_id=self.kwargs["company_id"],
             company__is_active=True,
             is_active=True,
-        )
+        ), self.request, "company__tenant")
 
     def perform_destroy(self, instance):
         instance.is_active = False
@@ -221,7 +243,7 @@ class CompanyContactDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 def _task_queryset_for_user(user):
     queryset = (
-        Task.objects.filter(is_deleted=False)
+        Task.objects.filter(is_deleted=False, tenant_id=user.tenant_id)
         .select_related("assigned_to", "created_by", "company", "parent_task")
         .prefetch_related("attachments", "recurring_instances")
     )
@@ -265,7 +287,10 @@ class TaskListCreateView(APIView):
     def post(self, request):
         serializer = TaskSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        task = serializer.save(created_by=request.user)
+        task = serializer.save(
+            created_by=request.user,
+            tenant_id=request.user.tenant_id,
+        )
         _add_task_attachments(task, request)
         return Response(
             TaskSerializer(task, context={"request": request}).data,
@@ -335,10 +360,10 @@ class TaskOptionsView(APIView):
 
     def get(self, request):
         user_model = get_user_model()
-        users = user_model.objects.filter(is_active=True).order_by(
+        users = user_model.objects.filter(tenant_id=request.user.tenant_id, is_active=True).order_by(
             "first_name", "last_name"
         )
-        companies = Company.objects.filter(is_active=True).order_by("name")
+        companies = Company.objects.filter(tenant_id=request.user.tenant_id, is_active=True).order_by("name")
         return Response(
             {
                 "modules": [
@@ -376,7 +401,10 @@ class TaskOptionsView(APIView):
 @permission_classes([IsAuthenticated])
 def get_task_dashboard(request):
     today = timezone.localdate()
-    base_queryset = Task.objects.filter(is_deleted=False)
+    base_queryset = Task.objects.filter(
+        tenant_id=request.user.tenant_id,
+        is_deleted=False,
+    )
     user = request.user
     role_code = getattr(getattr(user, "role", None), "code", None)
     can_view_all = (
@@ -446,7 +474,10 @@ def get_activities(request):
         user.is_superuser or user.is_staff or role_code in {"superadmin", "manager"}
     )
 
-    base_queryset = Task.objects.filter(is_deleted=False)
+    base_queryset = Task.objects.filter(
+        tenant_id=request.user.tenant_id,
+        is_deleted=False,
+    )
     if not can_view_all:
         base_queryset = base_queryset.filter(Q(assigned_to=user) | Q(created_by=user))
 
@@ -594,20 +625,26 @@ class LeadCSVImportView(APIView):
                     in {"1", "true", "yes", "y"},
                 }
                 contact_email = data["contact_email"]
-                if contact_email and Lead.objects.filter(is_active=True).filter(
+                if contact_email and Lead.objects.filter(
+                    tenant_id=request.user.tenant_id,
+                    is_active=True,
+                ).filter(
                     Q(contact__email__iexact=contact_email)
                     | Q(email__iexact=contact_email)
                 ).exists():
                     duplicates += 1
                     continue
-                serializer = LeadSerializer(data=data)
+                serializer = LeadSerializer(
+                    data=data,
+                    context={"request": request},
+                )
                 if not serializer.is_valid():
                     invalid += 1
                     row_errors.append(
                         {"row": total_rows + 1, "errors": serializer.errors}
                     )
                     continue
-                serializer.save()
+                serializer.save(tenant_id=request.user.tenant_id)
                 imported += 1
 
             return Response(
@@ -688,16 +725,22 @@ class LeadSampleDataView(APIView):
         existing = 0
         for lead_data in self.sample_leads:
             contact_email = lead_data["contact_email"]
-            if Lead.objects.filter(is_active=True).filter(
+            if Lead.objects.filter(
+                tenant_id=request.user.tenant_id,
+                is_active=True,
+            ).filter(
                 Q(contact__email__iexact=contact_email)
                 | Q(email__iexact=contact_email)
             ).exists():
                 existing += 1
                 continue
 
-            serializer = LeadSerializer(data=lead_data)
+            serializer = LeadSerializer(
+                data=lead_data,
+                context={"request": request},
+            )
             serializer.is_valid(raise_exception=True)
-            serializer.save()
+            serializer.save(tenant_id=request.user.tenant_id)
             created += 1
 
         email_campaign_logger.info(
@@ -731,17 +774,23 @@ class LeadListView(APIView):
 
     def get(self, request):
         leads = (
-            Lead.objects.filter(is_active=True, is_opportunity=False)
+            Lead.objects.filter(
+                tenant_id=request.user.tenant_id,
+                is_active=True,
+                is_opportunity=False,
+            )
             .select_related("company", "contact")
             .order_by("-enquiry_date", "-created_at")
         )
         suppressed_emails = set(
-            EmailSuppression.objects.values_list("email", flat=True)
+            EmailSuppression.objects.filter(
+                tenant_id=request.user.tenant_id
+            ).values_list("email", flat=True)
         )
         serializer = LeadSerializer(
             leads,
             many=True,
-            context={"suppressed_emails": suppressed_emails},
+            context={"suppressed_emails": suppressed_emails, "request": request},
         )
 
         return Response(
@@ -750,9 +799,9 @@ class LeadListView(APIView):
         )
 
     def post(self, request):
-        serializer = LeadSerializer(data=request.data)
+        serializer = LeadSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        serializer.save(tenant_id=request.user.tenant_id)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -760,14 +809,27 @@ class LeadDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Lead.objects.filter(is_active=True).select_related("company", "contact")
     serializer_class = LeadSerializer
 
+    def get_queryset(self):
+        return _tenant_queryset(super().get_queryset(), self.request)
+
+
 class OpportunityListCreateView(generics.ListCreateAPIView):
     queryset = Opportunity.objects.filter(is_active=True).prefetch_related("modules")
     serializer_class = OpportunityCreateSerializer
+
+    def get_queryset(self):
+        return _tenant_queryset(super().get_queryset(), self.request)
+
+    def perform_create(self, serializer):
+        serializer.save(tenant_id=self.request.user.tenant_id)
 
 
 class OpportunityDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Opportunity.objects.filter(is_active=True).prefetch_related("modules")
     serializer_class = OpportunityCreateSerializer
+
+    def get_queryset(self):
+        return _tenant_queryset(super().get_queryset(), self.request)
 
     def perform_destroy(self, instance):
         instance.is_active = False
@@ -779,16 +841,16 @@ class OpportunityModuleListCreateView(generics.ListCreateAPIView):
 
     def get_opportunity(self):
         return get_object_or_404(
-            Opportunity,
+            _tenant_queryset(Opportunity.objects.all(), self.request),
             pk=self.kwargs["opportunity_id"],
             is_active=True,
         )
 
     def get_queryset(self):
-        return OpportunityModule.objects.filter(
+        return _tenant_queryset(OpportunityModule.objects.filter(
             opportunity_id=self.kwargs["opportunity_id"],
             opportunity__is_active=True,
-        ).order_by("module_number")
+        ).order_by("module_number"), self.request, "opportunity__tenant")
 
     def perform_create(self, serializer):
         opportunity = self.get_opportunity()
@@ -807,10 +869,10 @@ class OpportunityModuleDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = OpportunityModuleSerializer
 
     def get_queryset(self):
-        return OpportunityModule.objects.filter(
+        return _tenant_queryset(OpportunityModule.objects.filter(
             opportunity_id=self.kwargs["opportunity_id"],
             opportunity__is_active=True,
-        )
+        ), self.request, "opportunity__tenant")
 
 
 class QuotationListCreateView(generics.ListCreateAPIView):
@@ -834,7 +896,7 @@ class QuotationListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = _tenant_queryset(super().get_queryset(), self.request)
         status_filter = self.request.query_params.get("status")
         opportunity_id = self.request.query_params.get("opportunity")
         search = self.request.query_params.get("search")
@@ -873,6 +935,9 @@ class QuotationDetailView(generics.RetrieveUpdateDestroyAPIView):
     )
     serializer_class = QuotationSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return _tenant_queryset(super().get_queryset(), self.request)
 
 def _generate_final_offer_pdf_bytes(quotation):
     company = quotation.company or (
@@ -964,6 +1029,9 @@ class GenerateFinalOfferView(generics.GenericAPIView):
     serializer_class = QuotationSerializer
     permission_classes = [IsAuthenticated]
 
+    def get_queryset(self):
+        return _tenant_queryset(super().get_queryset(), self.request)
+
     def post(self, request, pk):
         quotation = self.get_object()
         pdf_bytes, file_name = _generate_final_offer_pdf_bytes(quotation)
@@ -997,12 +1065,20 @@ class UpdateFinalOfferView(APIView):
     @transaction.atomic
     def patch(self, request, pk):
         quotation = get_object_or_404(
-            Quotation.objects.select_for_update().select_related(
+            _tenant_queryset(Quotation.objects.select_for_update().select_related(
                 "company", "company__city", "company__state", "opportunity"
-            ),
+            ), request),
             pk=pk,
         )
-        serializer = FinalOfferUpdateSerializer(data=request.data)
+        serializer = FinalOfferUpdateSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.fields["items"].child.fields["module"].queryset = (
+            OpportunityModule.objects.filter(
+                opportunity__tenant_id=request.user.tenant_id
+            )
+        )
         serializer.is_valid(raise_exception=True)
         items_data = serializer.validated_data["items"]
 
@@ -1168,9 +1244,9 @@ def _refresh_sales_order_pdf(sales_order):
 @transaction.atomic
 def create_sales_order_from_quotation(request, quotation_id):
     quotation = get_object_or_404(
-        Quotation.objects.select_for_update().select_related(
+        _tenant_queryset(Quotation.objects.select_for_update().select_related(
             "company", "opportunity__company", "opportunity__lead__company"
-        ),
+        ), request),
         pk=quotation_id,
     )
     if not quotation.cpo_created:
@@ -1200,7 +1276,10 @@ def create_sales_order_from_quotation(request, quotation_id):
 
     current_year = timezone.localdate().year
     last_so = (
-        SalesOrder.objects.filter(so_number__startswith=f"SO-{current_year}-")
+        SalesOrder.objects.filter(
+            tenant_id=request.user.tenant_id,
+            so_number__startswith=f"SO-{current_year}-",
+        )
         .order_by("-so_number")
         .first()
     )
@@ -1233,6 +1312,7 @@ def create_sales_order_from_quotation(request, quotation_id):
         remarks=request.data.get("remarks", ""),
         status="DRAFT",
         created_by=request.user,
+        tenant_id=request.user.tenant_id,
     )
     _refresh_sales_order_pdf(sales_order)
     quotation.status = "CONVERTED"
@@ -1257,6 +1337,9 @@ class SalesOrderListView(generics.ListAPIView):
         .all()
     )
 
+    def get_queryset(self):
+        return _tenant_queryset(super().get_queryset(), self.request)
+
 
 class SalesOrderDetailView(generics.RetrieveUpdateAPIView):
     serializer_class = SalesOrderSerializer
@@ -1268,6 +1351,9 @@ class SalesOrderDetailView(generics.RetrieveUpdateAPIView):
         )
         .prefetch_related("quotation__items__module", "company__contacts")
     )
+
+    def get_queryset(self):
+        return _tenant_queryset(super().get_queryset(), self.request)
 
     def perform_update(self, serializer):
         sales_order = serializer.save()
@@ -1342,12 +1428,14 @@ def get_order_dashboard(request):
         )
 
     quotation_queryset = Quotation.objects.filter(
+        tenant_id=request.user.tenant_id,
         quotation_date__gte=start_date,
         quotation_date__lte=end_date,
     )
     final_offer_queryset = quotation_queryset.filter(final_offer_generated=True)
     cpo_queryset = quotation_queryset.filter(cpo_date__isnull=False)
     sales_order_queryset = SalesOrder.objects.filter(
+        tenant_id=request.user.tenant_id,
         so_date__gte=start_date,
         so_date__lte=end_date,
     )
@@ -1449,7 +1537,10 @@ def get_order_dashboard(request):
 
 class EmailLogListView(APIView):
     def get(self, request):
-        logs = MessageLog.objects.filter(channel=Channel.EMAIL).select_related(
+        logs = MessageLog.objects.filter(
+            batch_lead__batch__tenant_id=request.user.tenant_id,
+            channel=Channel.EMAIL,
+        ).select_related(
             "batch_lead", "template"
         ).order_by("-sent_at")
         limit = request.query_params.get("limit")
@@ -1466,9 +1557,36 @@ class EmailLogListView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+class EmailCampaignSettingsView(APIView):
+    def get(self, request):
+        campaign_settings, _ = EmailCampaignSettings.objects.get_or_create(
+            tenant_id=request.user.tenant_id
+        )
+        return Response(
+            EmailCampaignSettingsSerializer(campaign_settings).data,
+            status=status.HTTP_200_OK,
+        )
+
+    def patch(self, request):
+        campaign_settings, _ = EmailCampaignSettings.objects.get_or_create(
+            tenant_id=request.user.tenant_id
+        )
+        serializer = EmailCampaignSettingsSerializer(
+            campaign_settings,
+            data=request.data,
+            partial=True,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 class InboundReplyListView(APIView):
     def get(self, request):
-        replies = InboundReply.objects.select_related(
+        replies = InboundReply.objects.filter(
+            batch_lead__batch__tenant_id=request.user.tenant_id
+        ).select_related(
             "batch_lead__lead", "batch_lead__batch"
         ).all()
 
@@ -1497,7 +1615,9 @@ class InboundReplyListView(APIView):
 class InboundReplyDetailView(APIView):
     def get(self, request, pk):
         reply = get_object_or_404(
-            InboundReply.objects.select_related(
+            InboundReply.objects.filter(
+                batch_lead__batch__tenant_id=request.user.tenant_id
+            ).select_related(
                 "batch_lead__lead", "batch_lead__batch"
             ),
             pk=pk,
@@ -1505,12 +1625,12 @@ class InboundReplyDetailView(APIView):
         return Response(InboundReplySerializer(reply).data, status=status.HTTP_200_OK)
 
 
-class EmailTemplateViewSet(viewsets.ModelViewSet):
+class EmailTemplateViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
     queryset = MessageTemplate.objects.all()
     serializer_class = MessageTemplateSerializer
 
     def perform_create(self, serializer):
-        template = serializer.save()
+        template = serializer.save(tenant_id=self.request.user.tenant_id)
         email_campaign_logger.info(
             "event=template.created actor_id=%s template_id=%s",
             _campaign_actor_id(self.request),
@@ -1536,12 +1656,12 @@ class EmailTemplateViewSet(viewsets.ModelViewSet):
         )
 
 
-class EmailSequenceViewSet(viewsets.ModelViewSet):
+class EmailSequenceViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
     queryset = Sequence.objects.all()
     serializer_class = SequenceSerializer
 
     def perform_create(self, serializer):
-        sequence = serializer.save()
+        sequence = serializer.save(tenant_id=self.request.user.tenant_id)
         email_campaign_logger.info(
             "event=sequence.created actor_id=%s sequence_id=%s",
             _campaign_actor_id(self.request),
@@ -1570,6 +1690,13 @@ class EmailSequenceViewSet(viewsets.ModelViewSet):
 class EmailSequenceStepViewSet(viewsets.ModelViewSet):
     queryset = SequenceStep.objects.all()
     serializer_class = SequenceStepSerializer
+
+    def get_queryset(self):
+        return _tenant_queryset(
+            super().get_queryset(),
+            self.request,
+            "sequence__tenant",
+        )
 
     def perform_create(self, serializer):
         step = serializer.save()
@@ -1602,12 +1729,12 @@ class EmailSequenceStepViewSet(viewsets.ModelViewSet):
         )
 
 
-class BatchViewSet(viewsets.ModelViewSet):
+class BatchViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
     queryset = Batch.objects.all()
     serializer_class = BatchSerializer
 
     def perform_create(self, serializer):
-        batch = serializer.save()
+        batch = serializer.save(tenant_id=self.request.user.tenant_id)
         email_campaign_logger.info(
             "event=campaign.created actor_id=%s campaign_id=%s recipient_count=%s",
             _campaign_actor_id(self.request),
@@ -1751,7 +1878,12 @@ class BatchViewSet(viewsets.ModelViewSet):
 
         template = None
         if template_id is not None:
-            template = get_object_or_404(MessageTemplate, pk=template_id)
+            template = get_object_or_404(
+                MessageTemplate.objects.filter(
+                    tenant_id=self.request.user.tenant_id
+                ),
+                pk=template_id,
+            )
             if template.channel != Channel.EMAIL:
                 return Response(
                     {"detail": "Choose an email template."},
@@ -1767,6 +1899,7 @@ class BatchViewSet(viewsets.ModelViewSet):
             sequence = Sequence.objects.create(
                 name=f"{batch.name} - One-time email",
                 channel=Channel.EMAIL,
+                tenant_id=batch.tenant_id,
             )
             SequenceStep.objects.create(
                 sequence=sequence,
@@ -1919,14 +2052,21 @@ def campaign_unsubscribe(request, token):
             "campaigns/unsubscribe.html",
             {
                 "already_unsubscribed": (
-                    batch_lead.unsubscribed or is_email_suppressed(batch_lead.email)
+                    batch_lead.unsubscribed
+                    or is_email_suppressed(
+                        batch_lead.email,
+                        tenant_id=batch_lead.batch.tenant_id,
+                    )
                 ),
                 "completed": False,
                 "mailgun_sync_failed": False,
             },
         )
 
-    record_unsubscribe(batch_lead.email)
+    record_unsubscribe(
+        batch_lead.email,
+        tenant_id=batch_lead.batch.tenant_id,
+    )
     email_campaign_logger.info(
         "event=recipient.unsubscribed campaign_id=%s batch_lead_id=%s",
         batch_lead.batch_id,
@@ -1956,22 +2096,33 @@ def campaign_unsubscribe(request, token):
 
 
 def _is_valid_mailgun_signature(signature_data):
-    signing_key = getattr(settings, "ANYMAIL", {}).get(
-        "MAILGUN_WEBHOOK_SIGNING_KEY", ""
+    signing_keys = [
+        getattr(settings, "ANYMAIL", {}).get(
+            "MAILGUN_WEBHOOK_SIGNING_KEY", ""
+        )
+    ]
+    signing_keys.extend(
+        decrypt_mailgun_secret(encrypted_key)
+        for encrypted_key in TenantMailgunSettings.objects.exclude(
+            encrypted_webhook_signing_key=""
+        ).values_list("encrypted_webhook_signing_key", flat=True)
     )
     timestamp = str(signature_data.get("timestamp", ""))
     token = str(signature_data.get("token", ""))
     signature = str(signature_data.get("signature", ""))
 
-    if not signing_key or not timestamp or not token or not signature:
+    if not timestamp or not token or not signature:
         return False
 
-    expected_signature = hmac.new(
-        signing_key.encode(),
-        f"{timestamp}{token}".encode(),
-        hashlib.sha256,
-    ).hexdigest()
-    return hmac.compare_digest(signature, expected_signature)
+    signed_data = f"{timestamp}{token}".encode()
+    return any(
+        signing_key
+        and hmac.compare_digest(
+            signature,
+            hmac.new(signing_key.encode(), signed_data, hashlib.sha256).hexdigest(),
+        )
+        for signing_key in signing_keys
+    )
 
 
 @csrf_exempt
@@ -2014,13 +2165,24 @@ def mailgun_webhook(request):
                 {"status": "ignored", "event": event, "message": "Event is not handled"}
             )
 
+        if event == "unsubscribed" and recipient:
+            recipient_batch_leads = BatchLead.objects.filter(
+                email__iexact=recipient
+            )
+            tenant_ids = list(
+                recipient_batch_leads.values_list(
+                    "batch__tenant_id",
+                    flat=True,
+                ).distinct()
+            )
+            if len(tenant_ids) == 1:
+                record_unsubscribe(recipient, tenant_id=tenant_ids[0])
+
         if event == "unsubscribed":
             if not recipient:
                 return JsonResponse(
                     {"error": "Unsubscribe event has no recipient."}, status=400
                 )
-            record_unsubscribe(recipient)
-
         message_id = (
             event_data.get("message", {}).get("headers", {}).get("message-id", "")
         )
@@ -2033,16 +2195,6 @@ def mailgun_webhook(request):
             if message_id
             else None
         )
-
-        # Fall back to recipient for legacy events without a message ID.
-        if not email_log:
-            email_log = (
-                MessageLog.objects.filter(
-                    channel=Channel.EMAIL, to_address__iexact=recipient
-                )
-                .order_by("-sent_at")
-                .first()
-            )
 
         if not email_log:
             if event == "unsubscribed":
@@ -2060,6 +2212,12 @@ def mailgun_webhook(request):
             )
             return JsonResponse(
                 {"status": "not_found", "event": event, "recipient": recipient}
+            )
+
+        if event == "unsubscribed" and recipient:
+            record_unsubscribe(
+                recipient,
+                tenant_id=email_log.batch_lead.batch.tenant_id,
             )
 
         if email_log.status == MessageLog.Status.REPLIED:
@@ -2144,11 +2302,25 @@ def mailgun_inbound_webhook(request):
             or ""
         ).strip() or None
 
-        # Find the lead who replied
-        batch_lead = BatchLead.objects.filter(email__iexact=sender).first()
+        # Only auto-match replies when the sender belongs to one tenant.
+        matching_batch_leads = BatchLead.objects.filter(
+            email__iexact=sender
+        ).select_related("batch").order_by("-batch__created_at")
+        tenant_ids = list(
+            matching_batch_leads.values_list("batch__tenant_id", flat=True).distinct()
+        )
+        if len(tenant_ids) != 1:
+            email_campaign_logger.info(
+                "event=reply.received matched=false reason=ambiguous_or_unknown_sender"
+            )
+            return JsonResponse(
+                {"status": "ignored", "message": "No unique tenant match found"}
+            )
+        batch_lead = matching_batch_leads.first()
 
         reply_values = {
             "batch_lead": batch_lead,
+            "tenant_id": tenant_ids[0],
             "sender_email": sender,
             "recipient_email": recipient,
             "received_at": timezone.now(),
@@ -2160,16 +2332,6 @@ def mailgun_inbound_webhook(request):
             )
         else:
             InboundReply.objects.create(**reply_values)
-
-        if not batch_lead:
-            email_campaign_logger.info("event=reply.received matched=false")
-            return JsonResponse(
-                {
-                    "status": "ignored",
-                    "message": "No matching lead found",
-                    "sender": sender,
-                }
-            )
 
         # Mark lead as replied
         batch_lead.replied = True
@@ -2300,15 +2462,22 @@ def whatsapp_webhook(request):
                 sender = re.sub(r"\D", "", inbound_message.get("from", ""))
                 if not sender:
                     continue
-                batch_lead = (
+                matching_batch_leads = (
                     BatchLead.objects.filter(
                         phone__in=[sender, f"+{sender}"],
                         replied=False,
                         message_logs__channel=Channel.WHATSAPP,
                     )
                     .distinct()
-                    .first()
                 )
+                if (
+                    matching_batch_leads.values(
+                        "batch__tenant_id"
+                    ).distinct().count()
+                    != 1
+                ):
+                    continue
+                batch_lead = matching_batch_leads.first()
                 if not batch_lead:
                     continue
 
@@ -2344,7 +2513,11 @@ def whatsapp_webhook(request):
 
 @api_view(["POST"])
 def lead_convert_to_opportunity(request, lead_id):
-    lead = get_object_or_404(Lead, pk=lead_id, is_active=True)
+    lead = get_object_or_404(
+        Lead.objects.filter(tenant_id=request.user.tenant_id),
+        pk=lead_id,
+        is_active=True,
+    )
 
     if lead.is_opportunity:
         return Response(
@@ -2360,6 +2533,7 @@ def lead_convert_to_opportunity(request, lead_id):
         is_converted_from_lead=True,
         converted_at=timezone.now(),
         converted_by=request.user if request.user.is_authenticated else None,
+        tenant_id=lead.tenant_id,
     )
 
     lead.is_opportunity = True
@@ -2379,13 +2553,16 @@ def lead_convert_to_opportunity(request, lead_id):
     # convert to quotaitn
 
 
-def generate_quotation_number():
+def generate_quotation_number(tenant_id=None):
     year = timezone.now().year
 
     prefix = f"QT-{year}-"
 
     last_quotation = (
-        Quotation.objects.filter(quotation_number__startswith=prefix)
+        Quotation.objects.filter(
+            quotation_number__startswith=prefix,
+            tenant_id=tenant_id,
+        )
         .order_by("-id")
         .first()
     )
@@ -2405,7 +2582,13 @@ class NextQuotationNumberView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response({"quotation_number": generate_quotation_number()})
+        return Response(
+            {
+                "quotation_number": generate_quotation_number(
+                    request.user.tenant_id
+                )
+            }
+        )
 
 
 class ConvertOpportunityToQuotationView(APIView):
@@ -2414,9 +2597,9 @@ class ConvertOpportunityToQuotationView(APIView):
     @transaction.atomic
     def post(self, request, pk):
         opportunity = (
-            Opportunity.objects.prefetch_related("modules")
+            _tenant_queryset(Opportunity.objects.prefetch_related("modules")
             .select_related("company", "lead")
-            .filter(id=pk, is_active=True)
+            .filter(id=pk, is_active=True), request)
             .first()
         )
 
@@ -2529,7 +2712,11 @@ class ConvertOpportunityToQuotationView(APIView):
                     {"detail": "Select a valid company."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            company = Company.objects.filter(pk=company_id, is_active=True).first()
+            company = Company.objects.filter(
+                pk=company_id,
+                tenant_id=request.user.tenant_id,
+                is_active=True,
+            ).first()
             if company is None:
                 return Response(
                     {"detail": "The selected company was not found."},
@@ -2545,7 +2732,7 @@ class ConvertOpportunityToQuotationView(APIView):
             )
 
         quotation = Quotation.objects.create(
-            quotation_number=generate_quotation_number(),
+            quotation_number=generate_quotation_number(request.user.tenant_id),
             quotation_date=timezone.now().date(),
             opportunity=opportunity,
             company=company,
@@ -2558,6 +2745,7 @@ class ConvertOpportunityToQuotationView(APIView):
             terms_conditions="",
             delivery_timeline="",
             created_by=request.user,
+            tenant_id=opportunity.tenant_id,
         )
 
         subtotal = Decimal("0.00")

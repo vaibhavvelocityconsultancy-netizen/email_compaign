@@ -57,10 +57,11 @@ def _message_ids(value):
     }
 
 
-def _match_campaign_log(sender, received_at, headers):
+def _match_campaign_log(sender, received_at, headers, tenant_id):
     logs = (
         MessageLog.objects.filter(
             channel=Channel.EMAIL,
+            batch_lead__batch__tenant_id=tenant_id,
             to_address__iexact=sender,
             sent_at__lte=received_at,
             status__in=REPLY_LOG_STATUSES,
@@ -201,7 +202,12 @@ def _process_message_data(mailbox, message, gmail_message_id):
     if not sender or sender == mailbox.email.casefold() or received_at is None:
         return False
 
-    matched_log = _match_campaign_log(sender, received_at, headers)
+    matched_log = _match_campaign_log(
+        sender,
+        received_at,
+        headers,
+        mailbox.tenant_id,
+    )
     if matched_log is None:
         return False
 
@@ -219,6 +225,7 @@ def _process_message_data(mailbox, message, gmail_message_id):
                 "body_html": "",
                 "message_id": dedupe_id,
                 "received_at": received_at,
+                "tenant_id": mailbox.tenant_id,
             },
         )
         if reply.batch_lead_id is None:
@@ -236,9 +243,20 @@ def _process_message_data(mailbox, message, gmail_message_id):
     return True
 
 
-def sync_gmail_replies():
+def sync_gmail_replies(mailbox_id=None):
+    if mailbox_id is None:
+        mailbox_ids = list(
+            GmailMailbox.objects.exclude(encrypted_credentials="").values_list(
+                "pk",
+                flat=True,
+            )
+        )
+        if not mailbox_ids:
+            raise GmailOAuthError("Gmail is not connected. Authorize a mailbox first.")
+        return sum(sync_gmail_replies(identifier) for identifier in mailbox_ids)
+
     with transaction.atomic():
-        mailbox = GmailMailbox.objects.select_for_update().filter(pk=1).first()
+        mailbox = GmailMailbox.objects.select_for_update().filter(pk=mailbox_id).first()
         if mailbox is None or not mailbox.encrypted_credentials:
             raise GmailOAuthError("Gmail is not connected. Authorize a mailbox first.")
         service = get_gmail_service(mailbox)
