@@ -133,6 +133,12 @@ class LoginView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data["user"]
+        logger.info(
+            "event=auth.login.success actor_id=%s tenant_id=%s",
+            user.pk,
+            user.tenant_id or "none",
+        )
         return Response({
             "access": serializer.validated_data["access"],
             "refresh": serializer.validated_data["refresh"],
@@ -147,6 +153,11 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+        logger.info(
+            "event=auth.register.success actor_id=%s tenant_id=%s",
+            user.pk,
+            user.tenant_id or "none",
+        )
         refresh = RefreshToken.for_user(user)
         return Response({
             "access": str(refresh.access_token),
