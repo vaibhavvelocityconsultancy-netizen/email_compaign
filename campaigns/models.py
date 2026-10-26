@@ -6,8 +6,21 @@ from django.db import models
 from django.utils import timezone
 
 
+class TenantOwnedModel(models.Model):
+    tenant = models.ForeignKey(
+        "accounts.Tenant",
+        on_delete=models.CASCADE,
+        related_name="+",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        abstract = True
+
+
 # Create your models here.
-class Company(models.Model):
+class Company(TenantOwnedModel):
     id = models.BigAutoField(primary_key=True)
     name = models.CharField(max_length=200)
     is_contact = models.BooleanField(default=False)
@@ -49,21 +62,31 @@ class CompanyContact(models.Model):
         return f"{self.name} - {self.company.name}"
 
 
-class Country(models.Model):
-    name = models.CharField(max_length=100, unique=True)
-    code = models.CharField(max_length=10, unique=True, null=True, blank=True)
+class Country(TenantOwnedModel):
+    name = models.CharField(max_length=100)
+    code = models.CharField(max_length=10, null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "name"], name="unique_country_name_per_tenant"
+            ),
+            models.UniqueConstraint(
+                fields=["tenant", "code"],
+                condition=models.Q(code__isnull=False),
+                name="unique_country_code_per_tenant",
+            ),
+        ]
 
     def __str__(self):
         return self.name
 
 
-class State(models.Model):
+class State(TenantOwnedModel):
     country = models.ForeignKey(
         Country, on_delete=models.CASCADE, related_name="states"
     )
@@ -76,7 +99,8 @@ class State(models.Model):
         ordering = ["name"]
         constraints = [
             models.UniqueConstraint(
-                fields=["country", "name"], name="unique_state_per_country"
+                fields=["tenant", "country", "name"],
+                name="unique_state_per_tenant_country",
             )
         ]
 
@@ -84,7 +108,7 @@ class State(models.Model):
         return f"{self.name}, {self.country.name}"
 
 
-class City(models.Model):
+class City(TenantOwnedModel):
     state = models.ForeignKey(State, on_delete=models.CASCADE, related_name="cities")
     name = models.CharField(max_length=100)
     is_active = models.BooleanField(default=True)
@@ -95,7 +119,8 @@ class City(models.Model):
         ordering = ["name"]
         constraints = [
             models.UniqueConstraint(
-                fields=["state", "name"], name="unique_city_per_state"
+                fields=["tenant", "state", "name"],
+                name="unique_city_per_tenant_state",
             )
         ]
 
@@ -108,7 +133,7 @@ class Channel(models.TextChoices):
     WHATSAPP = "whatsapp", "WhatsApp"
 
 
-class Lead(models.Model):
+class Lead(TenantOwnedModel):
     ENQUIRY_FOR_CHOICES = [
         ("LEAD", "Lead"),
         ("CLIENT", "Client"),
@@ -180,24 +205,38 @@ class Lead(models.Model):
 
     def __init__(self, *args, **kwargs):
         company_value = kwargs.get("company")
+        tenant = kwargs.get("tenant")
+        tenant_id = kwargs.get("tenant_id") or getattr(tenant, "pk", None)
         if isinstance(company_value, str):
-            kwargs["company"] = self._resolve_company_name(company_value)
+            kwargs["company"] = self._resolve_company_name(
+                company_value,
+                tenant_id,
+            )
         super().__init__(*args, **kwargs)
         if isinstance(self.company, str):
-            self.company = self._resolve_company_name(self.company)
+            self.company = self._resolve_company_name(
+                self.company,
+                self.tenant_id,
+            )
 
     @staticmethod
-    def _resolve_company_name(company_name):
+    def _resolve_company_name(company_name, tenant_id=None):
         if not company_name:
             return None
-        company = Company.objects.filter(name__iexact=company_name).first()
+        company = Company.objects.filter(
+            name__iexact=company_name,
+            tenant_id=tenant_id,
+        ).first()
         if company is not None:
             return company
-        return Company.objects.create(name=company_name)
+        return Company.objects.create(name=company_name, tenant_id=tenant_id)
 
     def save(self, *args, **kwargs):
         if isinstance(self.company, str):
-            self.company = self._resolve_company_name(self.company)
+            self.company = self._resolve_company_name(
+                self.company,
+                self.tenant_id,
+            )
         if not self.name and self.company and self.company.name:
             self.name = self.company.name
         if self.email in (None, ""):
@@ -210,7 +249,7 @@ class Lead(models.Model):
         return self.name or f"Enquiry #{self.sr_no}"
 
 
-class MessageTemplate(models.Model):
+class MessageTemplate(TenantOwnedModel):
     channel = models.CharField(
         max_length=20, choices=Channel.choices, default=Channel.EMAIL
     )
@@ -232,7 +271,7 @@ class MessageTemplate(models.Model):
         return self.name
 
 
-class Sequence(models.Model):
+class Sequence(TenantOwnedModel):
     channel = models.CharField(
         max_length=20, choices=Channel.choices, default=Channel.EMAIL
     )
@@ -272,7 +311,7 @@ class SequenceStep(models.Model):
             )
 
 
-class Batch(models.Model):
+class Batch(TenantOwnedModel):
     class Status(models.TextChoices):
         ACTIVE = "active", "Active"
         PAUSED = "paused", "Paused"
@@ -297,6 +336,23 @@ class Batch(models.Model):
         return self.name
 
 
+class EmailCampaignSettings(TenantOwnedModel):
+    id = models.BigAutoField(primary_key=True)
+    reply_to_email = models.EmailField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant"],
+                name="unique_email_campaign_settings_per_tenant",
+            )
+        ]
+
+    def __str__(self):
+        return "Email campaign settings"
+
+
 class BatchLead(models.Model):
     batch = models.ForeignKey(
         Batch, on_delete=models.CASCADE, related_name="batch_leads"
@@ -319,10 +375,18 @@ class BatchLead(models.Model):
         return f"{self.batch.name} - {self.lead}"
 
 
-class EmailSuppression(models.Model):
-    email = models.EmailField(unique=True)
+class EmailSuppression(TenantOwnedModel):
+    email = models.EmailField()
     unsubscribed_at = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "email"],
+                name="unique_email_suppression_per_tenant",
+            )
+        ]
 
     def save(self, *args, **kwargs):
         self.email = self.email.strip().lower()
@@ -375,7 +439,7 @@ class MessageLog(models.Model):
         return f"{self.to_address} - Step {self.step_number} - {self.status}"
 
 
-class InboundReply(models.Model):
+class InboundReply(TenantOwnedModel):
     batch_lead = models.ForeignKey(
         BatchLead,
         on_delete=models.SET_NULL,
@@ -390,13 +454,20 @@ class InboundReply(models.Model):
     body_html = models.TextField(blank=True)
     message_id = models.CharField(max_length=998, null=True, blank=True)
     message_id_hash = models.CharField(
-        max_length=64, unique=True, null=True, blank=True, editable=False
+        max_length=64, null=True, blank=True, editable=False
     )
     received_at = models.DateTimeField(default=timezone.now, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-received_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "message_id_hash"],
+                condition=models.Q(message_id_hash__isnull=False),
+                name="unique_reply_message_per_tenant",
+            )
+        ]
 
     @staticmethod
     def message_id_digest(message_id):
@@ -412,15 +483,24 @@ class InboundReply(models.Model):
         return f"{self.sender_email} - {self.received_at}"
 
 
-class GmailMailbox(models.Model):
-    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+class GmailMailbox(TenantOwnedModel):
+    id = models.BigAutoField(primary_key=True)
     email = models.EmailField(blank=True)
     encrypted_credentials = models.TextField(blank=True)
     history_id = models.CharField(max_length=64, blank=True)
     last_sync_at = models.DateTimeField(null=True, blank=True)
     oauth_state_hash = models.CharField(max_length=64, blank=True)
     oauth_state_created_at = models.DateTimeField(null=True, blank=True)
+    oauth_code_verifier = models.TextField(blank=True, default="")
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant"],
+                name="unique_gmail_mailbox_per_tenant",
+            )
+        ]
 
     def __str__(self):
         return self.email or "Connected Gmail mailbox"
@@ -429,7 +509,7 @@ class GmailMailbox(models.Model):
 EmailLog = MessageLog
 
 
-class Opportunity(models.Model):
+class Opportunity(TenantOwnedModel):
 
     STATUS_CHOICES = [
         ('PROSPECTING', 'Prospecting'),
@@ -577,7 +657,7 @@ class OpportunityModule(models.Model):
 from django.db import models
 
 
-class Quotation(models.Model):
+class Quotation(TenantOwnedModel):
 
     STATUS_CHOICES = [
         ("DRAFT", "Draft"),
@@ -600,11 +680,7 @@ class Quotation(models.Model):
     # BASIC INFORMATION
     # --------------------------------------------------
 
-    quotation_number = models.CharField(
-        max_length=50,
-        unique=True,
-        db_index=True
-    )
+    quotation_number = models.CharField(max_length=50, db_index=True)
 
     quotation_date = models.DateField()
 
@@ -801,12 +877,18 @@ class Quotation(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "quotation_number"],
+                name="unique_quotation_number_per_tenant",
+            )
+        ]
 
     def __str__(self):
         return self.quotation_number
 
 
-class SalesOrder(models.Model):
+class SalesOrder(TenantOwnedModel):
     STATUS_CHOICES = [
         ("DRAFT", "Draft"),
         ("CONFIRMED", "Confirmed"),
@@ -815,7 +897,7 @@ class SalesOrder(models.Model):
         ("CANCELLED", "Cancelled"),
     ]
 
-    so_number = models.CharField(max_length=50, unique=True)
+    so_number = models.CharField(max_length=50)
     so_date = models.DateField()
     quotation = models.ForeignKey(
         Quotation,
@@ -854,6 +936,12 @@ class SalesOrder(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "so_number"],
+                name="unique_sales_order_number_per_tenant",
+            )
+        ]
 
     def __str__(self):
         return self.so_number
@@ -933,7 +1021,7 @@ class QuotationItem(models.Model):
 
 # Task
 
-class Task(models.Model):
+class Task(TenantOwnedModel):
     MODULE_CHOICES = [
         ('LEAD', 'Lead'),
         ('OPPORTUNITY', 'Opportunity'),

@@ -10,6 +10,7 @@ from .models import (
     CompanyContact,
     Country,
     EmailSuppression,
+    EmailCampaignSettings,
     InboundReply,
     MessageLog,
     MessageTemplate,
@@ -26,8 +27,44 @@ from .models import (
     TaskAttachment,
 )
 
+
+class TenantScopedModelSerializer(serializers.ModelSerializer):
+    tenant_parent_paths = {
+        "companycontact": "company__tenant",
+        "sequencestep": "sequence__tenant",
+        "batchlead": "batch__tenant",
+        "messagelog": "batch_lead__batch__tenant",
+        "opportunitymodule": "opportunity__tenant",
+        "quotationitem": "quotation__tenant",
+        "taskattachment": "task__tenant",
+    }
+
+    def get_fields(self):
+        fields = super().get_fields()
+        request = self.context.get("request")
+        tenant_id = getattr(getattr(request, "user", None), "tenant_id", None)
+        if not tenant_id:
+            return fields
+
+        for field in fields.values():
+            queryset = getattr(field, "queryset", None)
+            model = getattr(queryset, "model", None)
+            if model is None:
+                continue
+            model_name = model._meta.model_name
+            if any(item.name == "tenant" for item in model._meta.get_fields()):
+                field.queryset = queryset.filter(tenant_id=tenant_id)
+            elif model_name in self.tenant_parent_paths:
+                field.queryset = queryset.filter(
+                    **{f"{self.tenant_parent_paths[model_name]}_id": tenant_id}
+                )
+            elif model_name == "user":
+                field.queryset = queryset.filter(tenant_id=tenant_id)
+        return fields
+
+
 # -------------------Masters - Country, State, City, Company, CompanyContact Serializer -------------------
-class CountrySerializer(serializers.ModelSerializer):
+class CountrySerializer(TenantScopedModelSerializer):
     code = serializers.CharField(
         required=False, allow_blank=True, allow_null=True, max_length=10
     )
@@ -40,19 +77,19 @@ class CountrySerializer(serializers.ModelSerializer):
         return value or None
 
 
-class StateSerializer(serializers.ModelSerializer):
+class StateSerializer(TenantScopedModelSerializer):
     class Meta:
         model = State
         fields = ["id", "name", "country", "is_active"]
 
 
-class CitySerializer(serializers.ModelSerializer):
+class CitySerializer(TenantScopedModelSerializer):
     class Meta:
         model = City
         fields = ["id", "name", "state", "is_active"]
 
 
-class CompanySerializer(serializers.ModelSerializer):
+class CompanySerializer(TenantScopedModelSerializer):
     contacts_count = serializers.IntegerField(read_only=True)
 
     city_name = serializers.CharField(source="city.name", read_only=True)
@@ -91,7 +128,7 @@ class CompanySerializer(serializers.ModelSerializer):
         ]
 
 
-class CompanyContactSerializer(serializers.ModelSerializer):
+class CompanyContactSerializer(TenantScopedModelSerializer):
     class Meta:
         model = CompanyContact
         fields = [
@@ -111,7 +148,7 @@ class CompanyContactSerializer(serializers.ModelSerializer):
 # ---------------- masters serializer ends -------------------
 
 # ------------------- Lead Serializer -------------------
-class LeadSerializer(serializers.ModelSerializer):
+class LeadSerializer(TenantScopedModelSerializer):
     unsubscribed = serializers.SerializerMethodField()
     company_name = serializers.CharField(
         write_only=True, required=False, allow_blank=True, max_length=200
@@ -223,10 +260,15 @@ class LeadSerializer(serializers.ModelSerializer):
         suppressed_emails = self.context.get("suppressed_emails")
         if suppressed_emails is not None:
             return email in suppressed_emails
-        return EmailSuppression.objects.filter(email__iexact=email).exists()
+        request = self.context.get("request")
+        tenant_id = getattr(getattr(request, "user", None), "tenant_id", None)
+        return EmailSuppression.objects.filter(
+            email__iexact=email,
+            tenant_id=tenant_id,
+        ).exists()
 
     @staticmethod
-    def _resolve_master(model_class, value, **filters):
+    def _resolve_master(model_class, value, tenant_id=None, **filters):
         if value in (None, ""):
             return None
         if isinstance(value, model_class):
@@ -235,7 +277,10 @@ class LeadSerializer(serializers.ModelSerializer):
             value = value.strip()
             if not value:
                 return None
-            queryset = model_class.objects.filter(**filters)
+            queryset = model_class.objects.filter(
+                tenant_id=tenant_id,
+                **filters,
+            )
             if value.isdigit():
                 obj = queryset.filter(pk=int(value)).first()
                 if obj is not None:
@@ -244,24 +289,40 @@ class LeadSerializer(serializers.ModelSerializer):
             if obj is not None:
                 return obj
             if model_class is Country:
-                return model_class.objects.create(name=value)
+                return model_class.objects.create(name=value, tenant_id=tenant_id)
             if model_class is State:
                 country = filters.get("country")
                 if country is None:
                     return None
-                return model_class.objects.create(country=country, name=value)
+                return model_class.objects.create(
+                    country=country,
+                    name=value,
+                    tenant_id=tenant_id,
+                )
             if model_class is City:
                 state = filters.get("state")
                 if state is None:
                     return None
-                return model_class.objects.create(state=state, name=value)
+                return model_class.objects.create(
+                    state=state,
+                    name=value,
+                    tenant_id=tenant_id,
+                )
             return None
         if isinstance(value, int):
-            return model_class.objects.filter(pk=value, **filters).first()
+            return model_class.objects.filter(
+                pk=value,
+                tenant_id=tenant_id,
+                **filters,
+            ).first()
         return None
 
-    @classmethod
-    def _save_company(cls, validated_data, instance=None):
+    def _save_company(self, validated_data, instance=None):
+        request = self.context.get("request")
+        tenant_id = (
+            getattr(getattr(request, "user", None), "tenant_id", None)
+            or getattr(instance, "tenant_id", None)
+        )
         company_name = validated_data.pop("company_name", "").strip()
         company_address = validated_data.pop("company_address", "")
         company_pincode = validated_data.pop("company_pincode", "")
@@ -279,23 +340,29 @@ class LeadSerializer(serializers.ModelSerializer):
             "gst_number": company_gst_number,
         }
 
-        country = cls._resolve_master(
+        country = self._resolve_master(
             Country,
             company_country,
+            tenant_id=tenant_id,
         )
-        state = cls._resolve_master(
+        state = self._resolve_master(
             State,
             company_state,
+            tenant_id=tenant_id,
             country=country,
         )
-        city = cls._resolve_master(
+        city = self._resolve_master(
             City,
             company_city,
+            tenant_id=tenant_id,
             state=state,
         )
 
         if country is None:
-            country = Country.objects.filter(name__iexact="India").first() or Country.objects.create(name="India")
+            country = Country.objects.filter(
+                name__iexact="India",
+                tenant_id=tenant_id,
+            ).first() or Country.objects.create(name="India", tenant_id=tenant_id)
         if state is not None:
             company_data["state"] = state
         if city is not None:
@@ -310,9 +377,12 @@ class LeadSerializer(serializers.ModelSerializer):
             else None
         )
         if company is None:
-            company = Company.objects.filter(name__iexact=company_name).first()
+            company = Company.objects.filter(
+                name__iexact=company_name,
+                tenant_id=tenant_id,
+            ).first()
         if company is None:
-            return Company.objects.create(**company_data)
+            return Company.objects.create(**company_data, tenant_id=tenant_id)
         for field, value in company_data.items():
             setattr(company, field, value)
         company.save()
@@ -389,6 +459,7 @@ class LeadSerializer(serializers.ModelSerializer):
                 "expected_close_date": lead.followup_date,
                 "is_converted_from_lead": True,
                 "converted_at": timezone.now(),
+                "tenant_id": lead.tenant_id,
             },
         )
         if not created:
@@ -403,7 +474,7 @@ class LeadSerializer(serializers.ModelSerializer):
       
 
 # -------- message template serializer ----------------------------
-class MessageTemplateSerializer(serializers.ModelSerializer):
+class MessageTemplateSerializer(TenantScopedModelSerializer):
     class Meta:
         model = MessageTemplate
         fields = [
@@ -424,7 +495,7 @@ class MessageTemplateSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
 
-class SequenceStepSerializer(serializers.ModelSerializer):
+class SequenceStepSerializer(TenantScopedModelSerializer):
     sequence = serializers.PrimaryKeyRelatedField(
         queryset=Sequence.objects.all(),
         required=False,
@@ -452,7 +523,7 @@ class SequenceStepSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class NestedSequenceStepSerializer(serializers.ModelSerializer):
+class NestedSequenceStepSerializer(TenantScopedModelSerializer):
     class Meta:
         model = SequenceStep
         fields = [
@@ -466,7 +537,7 @@ class NestedSequenceStepSerializer(serializers.ModelSerializer):
         validators = []
 
 
-class SequenceSerializer(serializers.ModelSerializer):
+class SequenceSerializer(TenantScopedModelSerializer):
     steps = NestedSequenceStepSerializer(many=True, required=False)
 
     class Meta:
@@ -518,7 +589,7 @@ class SequenceSerializer(serializers.ModelSerializer):
         return sequence
 
 
-class BatchSerializer(serializers.ModelSerializer):
+class BatchSerializer(TenantScopedModelSerializer):
     lead_ids = serializers.PrimaryKeyRelatedField(
         queryset=Lead.objects.all(),
         many=True,
@@ -537,7 +608,7 @@ class BatchSerializer(serializers.ModelSerializer):
             "status",
             "created_at",
         ]
-        read_only_fields = ["id", "created_at"]
+        read_only_fields = ["id", "created_at", "reply_to_email"]
 
     @staticmethod
     def _make_batch_leads(batch, leads, existing_ids=None):
@@ -551,7 +622,10 @@ class BatchSerializer(serializers.ModelSerializer):
             if (lead.contact and lead.contact.email) or lead.email
         ]
         suppressed_emails = set(
-            EmailSuppression.objects.filter(email__in=emails).values_list(
+            EmailSuppression.objects.filter(
+                email__in=emails,
+                tenant_id=batch.tenant_id,
+            ).values_list(
                 "email", flat=True
             )
         )
@@ -592,7 +666,14 @@ class BatchSerializer(serializers.ModelSerializer):
         return batch
 
 
-class BatchLeadSerializer(serializers.ModelSerializer):
+class EmailCampaignSettingsSerializer(TenantScopedModelSerializer):
+    class Meta:
+        model = EmailCampaignSettings
+        fields = ["reply_to_email", "updated_at"]
+        read_only_fields = ["updated_at"]
+
+
+class BatchLeadSerializer(TenantScopedModelSerializer):
     class Meta:
         model = BatchLead
         fields = [
@@ -612,7 +693,7 @@ class BatchLeadSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "unsubscribed", "unsubscribed_at"]
 
 
-class MessageLogSerializer(serializers.ModelSerializer):
+class MessageLogSerializer(TenantScopedModelSerializer):
     batch = serializers.IntegerField(source="batch_lead.batch_id", read_only=True)
     lead = serializers.IntegerField(source="batch_lead.lead_id", read_only=True)
     template_name = serializers.CharField(
@@ -636,7 +717,7 @@ class MessageLogSerializer(serializers.ModelSerializer):
         ]
 
 
-class InboundReplySerializer(serializers.ModelSerializer):
+class InboundReplySerializer(TenantScopedModelSerializer):
     lead = serializers.SerializerMethodField()
     campaign = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
@@ -675,7 +756,7 @@ class InboundReplySerializer(serializers.ModelSerializer):
 # ----------- email & whatsapp compaign ends -----
 
 # Opportunity Module Serializer
-class OpportunityModuleSerializer(serializers.ModelSerializer):
+class OpportunityModuleSerializer(TenantScopedModelSerializer):
     class Meta:
         model = OpportunityModule
         fields = [
@@ -720,7 +801,7 @@ class OpportunityModuleSerializer(serializers.ModelSerializer):
 OpportunityModuleCreateSerializer = OpportunityModuleSerializer
 
 
-class OpportunityCreateSerializer(serializers.ModelSerializer):
+class OpportunityCreateSerializer(TenantScopedModelSerializer):
     company_name = serializers.CharField(write_only=True, required=False)
     project_name = serializers.CharField(required=False, allow_blank=True)
     enquiry_for = serializers.CharField(write_only=True, required=False)
@@ -789,9 +870,17 @@ class OpportunityCreateSerializer(serializers.ModelSerializer):
         lead = validated_data.get('lead')
         company = validated_data.get('company') or (lead.company if lead else None)
         if company is None and company_name:
-            company = Company.objects.filter(name__iexact=company_name).first()
+            request = self.context.get("request")
+            tenant_id = getattr(getattr(request, "user", None), "tenant_id", None)
+            company = Company.objects.filter(
+                name__iexact=company_name,
+                tenant_id=tenant_id,
+            ).first()
             if company is None:
-                company = Company.objects.create(name=company_name)
+                company = Company.objects.create(
+                    name=company_name,
+                    tenant_id=tenant_id,
+                )
         if company is not None:
             validated_data['company'] = company
             company_name = company.name
@@ -804,9 +893,15 @@ class OpportunityCreateSerializer(serializers.ModelSerializer):
             validated_data['enquiry_for'] = enquiry_for
         if enquiry_date:
             validated_data['enquiry_date'] = enquiry_date
+        request = self.context.get("request")
+        tenant_id = validated_data.pop(
+            "tenant_id",
+            getattr(getattr(request, "user", None), "tenant_id", None),
+        )
         opportunity = Opportunity.objects.create(
             **validated_data,
-            is_converted_from_lead=bool(lead)
+            is_converted_from_lead=bool(lead),
+            tenant_id=tenant_id,
         )
 
         for index, module_data in enumerate(modules_data, start=1):
@@ -832,9 +927,17 @@ class OpportunityCreateSerializer(serializers.ModelSerializer):
         if enquiry_date:
             validated_data['enquiry_date'] = enquiry_date
         if company_name and 'company' not in validated_data:
-            company = Company.objects.filter(name__iexact=company_name).first()
+            request = self.context.get("request")
+            tenant_id = getattr(getattr(request, "user", None), "tenant_id", None)
+            company = Company.objects.filter(
+                name__iexact=company_name,
+                tenant_id=tenant_id,
+            ).first()
             if company is None:
-                company = Company.objects.create(name=company_name)
+                company = Company.objects.create(
+                    name=company_name,
+                    tenant_id=tenant_id,
+                )
             validated_data['company'] = company
         opportunity = super().update(instance, validated_data)
 
@@ -861,7 +964,7 @@ class OpportunityCreateSerializer(serializers.ModelSerializer):
         return data
 
 
-class QuotationItemSerializer(serializers.ModelSerializer):
+class QuotationItemSerializer(TenantScopedModelSerializer):
     module_name = serializers.CharField(read_only=True)
 
     class Meta:
@@ -938,7 +1041,7 @@ class FinalOfferUpdateSerializer(serializers.Serializer):
     items = FinalOfferItemUpdateSerializer(many=True)
 
 
-class QuotationSerializer(serializers.ModelSerializer):
+class QuotationSerializer(TenantScopedModelSerializer):
     items = QuotationItemSerializer(many=True, required=False)
     company_name = serializers.SerializerMethodField()
     company_address = serializers.SerializerMethodField()
@@ -1158,7 +1261,12 @@ class QuotationSerializer(serializers.ModelSerializer):
         user = getattr(request, "user", None)
         if user is None or not user.is_authenticated:
             raise serializers.ValidationError({"created_by": "An authenticated user is required."})
-        quotation = Quotation.objects.create(created_by=user, **validated_data)
+        tenant_id = validated_data.pop("tenant_id", user.tenant_id)
+        quotation = Quotation.objects.create(
+            created_by=user,
+            tenant_id=tenant_id,
+            **validated_data,
+        )
         for item_data in items_data:
             QuotationItem.objects.create(quotation=quotation, **item_data)
         return quotation
@@ -1178,7 +1286,7 @@ class QuotationSerializer(serializers.ModelSerializer):
         return quotation
       
 
-class SalesOrderSerializer(serializers.ModelSerializer):
+class SalesOrderSerializer(TenantScopedModelSerializer):
     company_name = serializers.CharField(source="company.name", read_only=True)
     company_address = serializers.CharField(source="company.address", read_only=True)
     company_city = serializers.IntegerField(source="company.city_id", read_only=True, allow_null=True)
@@ -1295,7 +1403,7 @@ class SalesOrderSerializer(serializers.ModelSerializer):
 
 # Task Serializers
 
-class TaskSerializer(serializers.ModelSerializer):
+class TaskSerializer(TenantScopedModelSerializer):
     assigned_to_name = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
     module_display = serializers.CharField(source='get_module_display', read_only=True)
@@ -1348,13 +1456,13 @@ class TaskSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_at', 'updated_at', 'created_by']
 
 
-class TaskAttachmentSerializer(serializers.ModelSerializer):
+class TaskAttachmentSerializer(TenantScopedModelSerializer):
     class Meta:
         model = TaskAttachment
         fields = ['id', 'file', 'file_name']
 
 
-class TaskCreateSerializer(serializers.ModelSerializer):
+class TaskCreateSerializer(TenantScopedModelSerializer):
     attachments = TaskAttachmentSerializer(many=True, read_only=True)
     company_name = serializers.CharField(source='company.name', read_only=True)
 

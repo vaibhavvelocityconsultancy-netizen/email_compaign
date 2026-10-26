@@ -68,7 +68,7 @@ def get_unsubscribe_url(batch_lead):
 
 
 @transaction.atomic
-def record_unsubscribe(email):
+def record_unsubscribe(email, tenant_id=None):
     normalized_email = normalize_email(email)
     if not normalized_email:
         raise ValueError("An email address is required to record an unsubscribe.")
@@ -76,35 +76,43 @@ def record_unsubscribe(email):
     now = timezone.now()
     suppression, created = EmailSuppression.objects.get_or_create(
         email=normalized_email,
+        tenant_id=tenant_id,
         defaults={"unsubscribed_at": now},
     )
     if not created:
         now = suppression.unsubscribed_at
 
-    BatchLead.objects.filter(email__iexact=normalized_email).update(
+    batch_leads = BatchLead.objects.filter(email__iexact=normalized_email)
+    if tenant_id is not None:
+        batch_leads = batch_leads.filter(batch__tenant_id=tenant_id)
+    batch_leads.update(
         unsubscribed=True,
         unsubscribed_at=now,
     )
     return suppression
 
 
-def suppressed_email_addresses(emails):
+def suppressed_email_addresses(emails, tenant_id=None):
     normalized_emails = {normalize_email(email) for email in emails if email}
     if not normalized_emails:
         return set()
+    queryset = EmailSuppression.objects.filter(email__in=normalized_emails)
+    if tenant_id is not None:
+        queryset = queryset.filter(tenant_id=tenant_id)
     return set(
-        EmailSuppression.objects.filter(email__in=normalized_emails).values_list(
+        queryset.values_list(
             "email", flat=True
         )
     )
 
 
-def is_email_suppressed(email):
+def is_email_suppressed(email, tenant_id=None):
     if not email:
         return False
-    return EmailSuppression.objects.filter(
-        email=normalize_email(email)
-    ).exists()
+    queryset = EmailSuppression.objects.filter(email=normalize_email(email))
+    if tenant_id is not None:
+        queryset = queryset.filter(tenant_id=tenant_id)
+    return queryset.exists()
 
 
 def sync_mailgun_suppression(email):

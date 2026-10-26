@@ -5,6 +5,7 @@ import secrets
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
@@ -19,8 +20,9 @@ from .gmail_oauth import (
     GmailOAuthError,
     complete_gmail_oauth,
     create_gmail_authorization_url,
+    decrypt_gmail_oauth_code_verifier,
 )
-from .models import Module, Role, RolePermission
+from .models import Module, Role, RolePermission, Tenant, TenantMailgunSettings
 from .serializers import (
     LoginSerializer,
     LogoutSerializer,
@@ -29,6 +31,7 @@ from .serializers import (
     RegisterSerializer,
     RolePermissionSerializer,
     RoleSerializer,
+    TenantMailgunSettingsSerializer,
     UserInfoSerializer,
     UserManagementSerializer,
 )
@@ -36,10 +39,74 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
+class IsSuperUser(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and request.user.is_superuser
+        )
+
+
+class TenantMailgunSettingsListView(APIView):
+    permission_classes = [IsSuperUser]
+
+    def get(self, request):
+        tenants = Tenant.objects.select_related("mailgun_settings").order_by("name", "id")
+        return Response([
+            {
+                "id": tenant.id,
+                "name": tenant.name,
+                "configured": bool(
+                    hasattr(tenant, "mailgun_settings")
+                    and tenant.mailgun_settings.encrypted_api_key
+                    and tenant.mailgun_settings.encrypted_webhook_signing_key
+                ),
+            }
+            for tenant in tenants
+        ])
+
+
+class TenantMailgunSettingsDetailView(APIView):
+    permission_classes = [IsSuperUser]
+
+    def get(self, request, tenant_id):
+        tenant = get_object_or_404(Tenant, pk=tenant_id)
+        settings_instance = TenantMailgunSettings.objects.filter(tenant=tenant).first()
+        if settings_instance is None:
+            return Response({
+                "tenant": tenant.id,
+                "tenant_name": tenant.name,
+                "default_from_email": "",
+                "sender_domain": "",
+                "has_api_key": False,
+                "has_webhook_signing_key": False,
+            })
+        return Response(TenantMailgunSettingsSerializer(settings_instance).data)
+
+    def put(self, request, tenant_id):
+        tenant = get_object_or_404(Tenant, pk=tenant_id)
+        settings_instance = TenantMailgunSettings.objects.filter(tenant=tenant).first()
+        serializer = TenantMailgunSettingsSerializer(
+            settings_instance,
+            data=request.data,
+            partial=settings_instance is not None,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save(tenant=tenant)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 class UserViewSet(viewsets.ModelViewSet):
     queryset = get_user_model().objects.all().order_by("id")
     serializer_class = UserManagementSerializer
     permission_classes = [permissions.IsAdminUser]
+
+    def get_queryset(self):
+        return self.queryset.filter(tenant_id=self.request.user.tenant_id)
+
+    def perform_create(self, serializer):
+        serializer.save(tenant=self.request.user.tenant)
 
 
 class RoleViewSet(viewsets.ModelViewSet):
@@ -114,22 +181,40 @@ class CurrentUserView(APIView):
 
 
 class GoogleAuthorizationView(APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAdminUser]
 
     def get(self, request):
         try:
             state = secrets.token_urlsafe(32)
-            authorization_url = create_gmail_authorization_url(state)
+            authorization_url, code_verifier = create_gmail_authorization_url(state)
         except GmailOAuthConfigurationError as error:
             return Response(
                 {"detail": str(error)},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
+        except GmailOAuthError as error:
+            logger.exception("Could not start Gmail OAuth: %s", str(error))
+            return Response(
+                {"detail": "Google authorization could not be started."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
-        mailbox, _ = GmailMailbox.objects.get_or_create(pk=1)
-        mailbox.oauth_state_hash = hashlib.sha256(state.encode("utf-8")).hexdigest()
+        mailbox, _ = GmailMailbox.objects.get_or_create(
+            tenant_id=request.user.tenant_id
+        )
+        mailbox.oauth_state_hash = hashlib.sha256(
+            state.encode("utf-8")
+        ).hexdigest()
         mailbox.oauth_state_created_at = timezone.now()
-        mailbox.save(update_fields=["oauth_state_hash", "oauth_state_created_at", "updated_at"])
+        mailbox.oauth_code_verifier = code_verifier
+        mailbox.save(
+            update_fields=[
+                "oauth_state_hash",
+                "oauth_state_created_at",
+                "oauth_code_verifier",
+                "updated_at",
+            ]
+        )
         return Response({"authorization_url": authorization_url})
 
 
@@ -147,10 +232,10 @@ class GoogleCallbackView(APIView):
             )
 
         with transaction.atomic():
-            mailbox = GmailMailbox.objects.select_for_update().filter(pk=1).first()
-            expected_hash = (
-                hashlib.sha256(state.encode("utf-8")).hexdigest() if mailbox else ""
-            )
+            expected_hash = hashlib.sha256(state.encode("utf-8")).hexdigest()
+            mailbox = GmailMailbox.objects.select_for_update().filter(
+                oauth_state_hash=expected_hash
+            ).first()
             state_age = (
                 timezone.now() - mailbox.oauth_state_created_at
                 if mailbox and mailbox.oauth_state_created_at
@@ -168,10 +253,17 @@ class GoogleCallbackView(APIView):
                     {"detail": "OAuth state is invalid or expired. Start authorization again."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            encrypted_code_verifier = mailbox.oauth_code_verifier
             mailbox.oauth_state_hash = ""
             mailbox.oauth_state_created_at = None
+            mailbox.oauth_code_verifier = ""
             mailbox.save(
-                update_fields=["oauth_state_hash", "oauth_state_created_at", "updated_at"]
+                update_fields=[
+                    "oauth_state_hash",
+                    "oauth_state_created_at",
+                    "oauth_code_verifier",
+                    "updated_at",
+                ]
             )
 
         provider_error = request.query_params.get("error")
@@ -187,7 +279,14 @@ class GoogleCallbackView(APIView):
             )
 
         try:
-            connected_mailbox = complete_gmail_oauth(code)
+            code_verifier = decrypt_gmail_oauth_code_verifier(
+                encrypted_code_verifier
+            )
+            connected_mailbox = complete_gmail_oauth(
+                code,
+                code_verifier=code_verifier,
+                mailbox=mailbox,
+            )
         except GmailOAuthConfigurationError as error:
             return Response(
                 {"detail": str(error)},

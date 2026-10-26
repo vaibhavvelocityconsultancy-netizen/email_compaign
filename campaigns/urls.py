@@ -9,6 +9,7 @@ from .views import (
     CompanyDetailView,
     CompanyListView,
     CountryViewSet,
+    EmailCampaignSettingsView,
     EmailLogListView,
     EmailSequenceStepViewSet,
     EmailSequenceViewSet,
@@ -174,6 +175,11 @@ urlpatterns = [
         "email-logs/",
         EmailLogListView.as_view(),
         name="email-log-list",
+    ),
+    path(
+        "email-campaign-settings/",
+        EmailCampaignSettingsView.as_view(),
+        name="email-campaign-settings",
     ),
     path(
         "inbound-replies/",

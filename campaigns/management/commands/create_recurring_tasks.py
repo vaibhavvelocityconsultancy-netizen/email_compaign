@@ -70,6 +70,7 @@ class Command(BaseCommand):
                     remarks=parent.remarks,
                     parent_task=parent,
                     is_recurring=False,
+                    tenant_id=parent.tenant_id,
                 )
 
             created_count += 1

@@ -118,10 +118,13 @@ class Command(BaseCommand):
 		if not sender_email or sender_email in OWN_EMAILS or not event_time:
 			return
 
-		batch_lead = BatchLead.objects.filter(
+		matches = BatchLead.objects.filter(
 			email__iexact=sender_email,
 			replied=False,
-		).first()
+		).select_related("batch").order_by("-batch__created_at")
+		if matches.values("batch__tenant_id").distinct().count() != 1:
+			return
+		batch_lead = matches.first()
 		if not batch_lead or not batch_lead.last_email_sent_at:
 			return
 
@@ -162,14 +165,7 @@ class Command(BaseCommand):
 			if log:
 				return log
 
-		recipient = event.get("recipient", "").lower()
-		if not recipient:
-			return None
-
-		return MessageLog.objects.filter(
-			channel=Channel.EMAIL,
-			to_address__iexact=recipient,
-		).order_by("-sent_at").first()
+		return None
 
 	@staticmethod
 	def _message_id(event):

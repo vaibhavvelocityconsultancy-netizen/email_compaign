@@ -12,8 +12,18 @@ from django.core.mail import EmailMultiAlternatives
 from django.db import transaction
 from django.utils.html import format_html
 from django.utils import timezone
+from anymail.backends.mailgun import EmailBackend
 
-from campaigns.models import Batch, BatchLead, Channel, EmailLog, MessageTemplate
+from accounts.mailgun_secrets import decrypt_mailgun_secret
+from accounts.models import TenantMailgunSettings
+from campaigns.models import (
+    Batch,
+    BatchLead,
+    Channel,
+    EmailCampaignSettings,
+    EmailLog,
+    MessageTemplate,
+)
 from campaigns.unsubscribe import (
     get_unsubscribe_url,
     is_email_suppressed,
@@ -139,6 +149,17 @@ class Command(BaseCommand):
             return
 
         for batch in active_batches:
+            mailgun_settings = TenantMailgunSettings.objects.filter(
+                tenant_id=batch.tenant_id
+            ).first()
+            tenant_connection = None
+            if mailgun_settings is not None:
+                tenant_connection = EmailBackend(
+                    api_key=decrypt_mailgun_secret(
+                        mailgun_settings.encrypted_api_key
+                    ),
+                    sender_domain=mailgun_settings.sender_domain,
+                )
 
             # Get sequence steps
             steps = list(
@@ -229,7 +250,8 @@ class Command(BaseCommand):
                         continue
 
                     if batch_lead.unsubscribed or is_email_suppressed(
-                        batch_lead.email
+                        batch_lead.email,
+                        tenant_id=batch.tenant_id,
                     ):
                         if not batch_lead.unsubscribed:
                             batch_lead.unsubscribed = True
@@ -488,16 +510,22 @@ class Command(BaseCommand):
                     # CREATE EMAIL
                     # --------------------------------
 
-                    from_email = getattr(
-                        settings,
-                        "DEFAULT_FROM_EMAIL",
-                        settings.EMAIL_HOST_USER
+                    from_email = (
+                        mailgun_settings.default_from_email
+                        if mailgun_settings is not None
+                        else getattr(
+                            settings,
+                            "DEFAULT_FROM_EMAIL",
+                            settings.EMAIL_HOST_USER
+                        )
                     )
 
-                    reply_to_email = getattr(
-                        batch,
-                        "reply_to_email",
-                        "",
+                    reply_to_email = (
+                        EmailCampaignSettings.objects.filter(
+                            tenant_id=batch.tenant_id
+                        )
+                        .values_list("reply_to_email", flat=True)
+                        .first()
                     )
                     reply_to_email = (
                         reply_to_email
@@ -510,6 +538,7 @@ class Command(BaseCommand):
                         from_email=from_email,
                         to=[batch_lead.email],
                         reply_to=[reply_to_email],
+                        connection=tenant_connection,
                     )
                     msg.content_subtype = "html"
                     msg.extra_headers = {
@@ -568,7 +597,10 @@ class Command(BaseCommand):
                     # SEND EMAIL
                     # --------------------------------
 
-                    if is_email_suppressed(batch_lead.email):
+                    if is_email_suppressed(
+                        batch_lead.email,
+                        tenant_id=batch.tenant_id,
+                    ):
                         batch_lead.unsubscribed = True
                         batch_lead.unsubscribed_at = timezone.now()
                         batch_lead.save(
