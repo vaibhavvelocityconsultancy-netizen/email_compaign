@@ -18,6 +18,7 @@ CAMPAIGN_API_PREFIXES = (
     "/api/email/unsubscribe/",
     "/api/webhooks/mailgun/",
 )
+ACCOUNT_API_PREFIXES = ("/api/auth/",)
 
 
 def _campaign_endpoint(path: str) -> str | None:
@@ -34,7 +35,17 @@ class EmailCampaignRequestLoggingMiddleware:
     def __call__(self, request: HttpRequest) -> HttpResponse:
         endpoint = _campaign_endpoint(request.path_info)
         if endpoint is None:
-            return self.get_response(request)
+            endpoint = next(
+                (prefix for prefix in ACCOUNT_API_PREFIXES
+                 if request.path_info == prefix.rstrip("/")
+                 or request.path_info.startswith(prefix)),
+                None,
+            )
+        if endpoint is None:
+            if request.path_info.startswith("/api/"):
+                endpoint = "/api/"
+            else:
+                return self.get_response(request)
 
         started_at = perf_counter()
         try:
@@ -42,11 +53,12 @@ class EmailCampaignRequestLoggingMiddleware:
         except Exception as error:
             logger.log(
                 logging.ERROR,
-                "event=api.request.failed method=%s endpoint=%s actor_id=%s "
+                "event=api.request.failed method=%s endpoint=%s actor_id=%s tenant_id=%s "
                 "error_type=%s duration_ms=%.2f",
                 request.method,
                 self._route_name(request, endpoint),
                 self._actor_id(request),
+                self._tenant_id(request),
                 type(error).__name__,
                 (perf_counter() - started_at) * 1000,
             )
@@ -57,11 +69,12 @@ class EmailCampaignRequestLoggingMiddleware:
             logging.ERROR if status_code >= 500 else (
                 logging.WARNING if status_code >= 400 else logging.INFO
             ),
-            "event=api.request method=%s endpoint=%s actor_id=%s status=%s "
+            "event=api.request method=%s endpoint=%s actor_id=%s tenant_id=%s status=%s "
             "duration_ms=%.2f",
             request.method,
             self._route_name(request, endpoint),
             self._actor_id(request),
+            self._tenant_id(request),
             status_code,
             (perf_counter() - started_at) * 1000,
         )
@@ -72,6 +85,13 @@ class EmailCampaignRequestLoggingMiddleware:
         user = getattr(request, "user", None)
         if user is not None and getattr(user, "is_authenticated", False):
             return user.pk
+        return "unknown"
+
+    @staticmethod
+    def _tenant_id(request: HttpRequest) -> str | int:
+        user = getattr(request, "user", None)
+        if user is not None and getattr(user, "is_authenticated", False):
+            return getattr(user, "tenant_id", None) or "none"
         return "unknown"
 
     @staticmethod
