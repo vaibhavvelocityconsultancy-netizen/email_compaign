@@ -13,6 +13,7 @@ from .models import (
     Country,
     EmailSuppression,
     EmailCampaignSettings,
+    LeadCategory,
     InboundReply,
     MessageLog,
     MessageTemplate,
@@ -151,8 +152,35 @@ class CompanyContactSerializer(TenantScopedModelSerializer):
 # ---------------- masters serializer ends -------------------
 
 # ------------------- Lead Serializer -------------------
+class LeadCategorySerializer(TenantScopedModelSerializer):
+    class Meta:
+        model = LeadCategory
+        fields = ["id", "name", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+    def validate_name(self, value):
+        value = value.strip()
+        request = self.context.get("request")
+        tenant_id = getattr(getattr(request, "user", None), "tenant_id", None)
+        existing = LeadCategory.objects.filter(
+            tenant_id=tenant_id,
+            name__iexact=value,
+        )
+        if self.instance:
+            existing = existing.exclude(pk=self.instance.pk)
+        if existing.exists():
+            raise serializers.ValidationError("This category already exists.")
+        return value
+
+
 class LeadSerializer(TenantScopedModelSerializer):
     unsubscribed = serializers.SerializerMethodField()
+    category = serializers.PrimaryKeyRelatedField(
+        queryset=LeadCategory.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    category_name = serializers.SerializerMethodField()
     company_name = serializers.CharField(
         write_only=True, required=False, allow_blank=True, max_length=200
     )
@@ -205,6 +233,8 @@ class LeadSerializer(TenantScopedModelSerializer):
             "contact_designation",
             "contact_mobile",
             "contact_email",
+            "category",
+            "category_name",
             "enquiry_for",
             "enquiry_date",
             "source",
@@ -247,9 +277,13 @@ class LeadSerializer(TenantScopedModelSerializer):
                 "contact_designation": contact.designation if contact else "",
                 "contact_mobile": contact.phone if contact else instance.phone,
                 "contact_email": contact.email if contact else instance.email or "",
+                "category_name": instance.category.name if instance.category else "",
             }
         )
         return data
+
+    def get_category_name(self, instance):
+        return instance.category.name if instance.category else ""
 
     def get_unsubscribed(self, instance):
         email = (
@@ -478,12 +512,16 @@ class LeadSerializer(TenantScopedModelSerializer):
 
 # -------- message template serializer ----------------------------
 class MessageTemplateSerializer(TenantScopedModelSerializer):
+    category_name = serializers.SerializerMethodField()
+
     class Meta:
         model = MessageTemplate
         fields = [
             "id",
             "channel",
             "name",
+            "category",
+            "category_name",
             "subject",
             "body",
             "signature",
@@ -496,6 +534,9 @@ class MessageTemplateSerializer(TenantScopedModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def get_category_name(self, instance):
+        return instance.category.name if instance.category else ""
 
 
 class SequenceStepSerializer(TenantScopedModelSerializer):
@@ -604,6 +645,7 @@ class BatchSerializer(TenantScopedModelSerializer):
         required=False,
         write_only=True,
     )
+    category_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Batch
@@ -612,12 +654,17 @@ class BatchSerializer(TenantScopedModelSerializer):
             "name",
             "sequence",
             "template",
+            "category",
+            "category_name",
             "reply_to_email",
             "lead_ids",
             "status",
             "created_at",
         ]
         read_only_fields = ["id", "created_at", "reply_to_email"]
+
+    def get_category_name(self, instance):
+        return instance.category.name if instance.category else ""
 
     def validate(self, attrs):
         template = attrs.get("template")

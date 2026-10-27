@@ -23,5 +23,14 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path("api/auth/", include("accounts.urls")),
     path("api/", include("campaigns.urls")),
-    
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+if settings.LOCAL_URL_PREFIX:
+    prefixed_api = f"{settings.LOCAL_URL_PREFIX}/api/"
+    urlpatterns += [
+        path(
+            f"{settings.LOCAL_URL_PREFIX}/api/auth/",
+            include("accounts.urls", namespace="prefixed_accounts"),
+        ),
+        path(prefixed_api, include("campaigns.urls")),
+    ]

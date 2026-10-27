@@ -133,6 +133,22 @@ class Channel(models.TextChoices):
     WHATSAPP = "whatsapp", "WhatsApp"
 
 
+class LeadCategory(TenantOwnedModel):
+    name = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "name"],
+                name="unique_lead_category_per_tenant",
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
+
 class Lead(TenantOwnedModel):
     ENQUIRY_FOR_CHOICES = [
         ("LEAD", "Lead"),
@@ -178,6 +194,13 @@ class Lead(TenantOwnedModel):
     )
     contact = models.ForeignKey(
         CompanyContact,
+        on_delete=models.SET_NULL,
+        related_name="leads",
+        null=True,
+        blank=True,
+    )
+    category = models.ForeignKey(
+        LeadCategory,
         on_delete=models.SET_NULL,
         related_name="leads",
         null=True,
@@ -254,6 +277,13 @@ class MessageTemplate(TenantOwnedModel):
         max_length=20, choices=Channel.choices, default=Channel.EMAIL
     )
     name = models.CharField(max_length=255)
+    category = models.ForeignKey(
+        LeadCategory,
+        on_delete=models.SET_NULL,
+        related_name="message_templates",
+        null=True,
+        blank=True,
+    )
     subject = models.CharField(max_length=500, blank=True)
     body = models.TextField()
     signature = models.TextField(blank=True)
@@ -318,6 +348,13 @@ class Batch(TenantOwnedModel):
         COMPLETED = "completed", "Completed"
 
     name = models.CharField(max_length=255)
+    category = models.ForeignKey(
+        LeadCategory,
+        on_delete=models.SET_NULL,
+        related_name="batches",
+        null=True,
+        blank=True,
+    )
     sequence = models.ForeignKey(
         Sequence,
         on_delete=models.CASCADE,

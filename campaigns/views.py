@@ -63,6 +63,7 @@ from campaigns.serializers import (
     StateSerializer,
     MessageTemplateSerializer,
     LeadSerializer,
+    LeadCategorySerializer,
     OpportunityCreateSerializer,
     OpportunityModuleSerializer,
     QuotationSerializer,
@@ -95,6 +96,7 @@ from .models import (
     State,
     MessageTemplate,
     Lead,
+    LeadCategory,
     Task,
     TaskAttachment,
 )
@@ -623,9 +625,20 @@ class LeadCSVImportView(APIView):
                     "status": lead_status,
                     "followup_date": _parse_import_date(row.get("followup_date")),
                     "followup_remarks": (row.get("followup_remarks") or "").strip(),
+                    "category": None,
                     "is_opportunity": (row.get("is_opportunity") or "").strip().lower()
                     in {"1", "true", "yes", "y"},
                 }
+                category_name = (
+                    row.get("category") or row.get("category_name") or ""
+                ).strip()
+                if category_name:
+                    category, _ = LeadCategory.objects.get_or_create(
+                        tenant_id=request.user.tenant_id,
+                        name__iexact=category_name,
+                        defaults={"name": category_name},
+                    )
+                    data["category"] = category.pk
                 contact_email = data["contact_email"]
                 if contact_email and Lead.objects.filter(
                     tenant_id=request.user.tenant_id,
@@ -772,6 +785,33 @@ class LeadOptionsView(APIView):
         )
 
 
+class LeadCategoryListCreateView(APIView):
+    def get(self, request):
+        categories = LeadCategory.objects.filter(
+            tenant_id=request.user.tenant_id
+        ).order_by("name", "id")
+        return Response(
+            LeadCategorySerializer(categories, many=True).data,
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request):
+        serializer = LeadCategorySerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        category, created = LeadCategory.objects.get_or_create(
+            tenant_id=request.user.tenant_id,
+            name__iexact=serializer.validated_data["name"],
+            defaults={"name": serializer.validated_data["name"]},
+        )
+        return Response(
+            LeadCategorySerializer(category).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+
 class LeadListView(APIView):
 
     def get(self, request):
@@ -779,9 +819,8 @@ class LeadListView(APIView):
             Lead.objects.filter(
                 tenant_id=request.user.tenant_id,
                 is_active=True,
-                is_opportunity=False,
             )
-            .select_related("company", "contact")
+            .select_related("company", "contact", "category")
             .order_by("-enquiry_date", "-created_at")
         )
         suppressed_emails = set(
@@ -808,7 +847,9 @@ class LeadListView(APIView):
 
 
 class LeadDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Lead.objects.filter(is_active=True).select_related("company", "contact")
+    queryset = Lead.objects.filter(is_active=True).select_related(
+        "company", "contact", "category"
+    )
     serializer_class = LeadSerializer
 
     def get_queryset(self):

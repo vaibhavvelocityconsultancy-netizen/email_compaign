@@ -16,6 +16,7 @@ from .views import (
     EmailSequenceViewSet,
     EmailTemplateViewSet,
     LeadCSVImportView,
+    LeadCategoryListCreateView,
     LeadDetailView,
     LeadListView,
     LeadOptionsView,
@@ -75,6 +76,11 @@ urlpatterns = [
         "lead-options/",
         LeadOptionsView.as_view(),
         name="lead-options",
+    ),
+    path(
+        "lead-categories/",
+        LeadCategoryListCreateView.as_view(),
+        name="lead-category-list-create",
     ),
     path(
         "leads/import-csv/",
