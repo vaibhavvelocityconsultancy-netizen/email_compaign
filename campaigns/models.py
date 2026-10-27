@@ -344,6 +344,7 @@ class EmailCampaignSettings(TenantOwnedModel):
     unsubscribe_company_address = models.CharField(max_length=255, blank=True, default="")
     unsubscribe_brand_color = models.CharField(max_length=7, blank=True, default="")
     unsubscribe_logo_url = models.URLField(max_length=500, blank=True, default="")
+    unsubscribe_logo = models.ImageField(upload_to="unsubscribe_logos/", blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

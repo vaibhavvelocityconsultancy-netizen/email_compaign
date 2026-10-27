@@ -710,10 +710,24 @@ class EmailCampaignSettingsSerializer(TenantScopedModelSerializer):
             "unsubscribe_support_email",
             "unsubscribe_company_address",
             "unsubscribe_brand_color",
-            "unsubscribe_logo_url",
+            "unsubscribe_logo",
             "updated_at",
         ]
         read_only_fields = ["updated_at"]
+
+    def get_fields(self):
+        fields = super().get_fields()
+        request = self.context.get("request")
+        if request and not request.user.is_superuser:
+            for name in (
+                "unsubscribe_company_name",
+                "unsubscribe_support_email",
+                "unsubscribe_company_address",
+                "unsubscribe_brand_color",
+                "unsubscribe_logo",
+            ):
+                fields[name].read_only = True
+        return fields
 
     def validate_unsubscribe_brand_color(self, value):
         value = value.strip()
@@ -721,10 +735,9 @@ class EmailCampaignSettingsSerializer(TenantScopedModelSerializer):
             raise serializers.ValidationError("Use a hex color like #1f5eff.")
         return value
 
-    def validate_unsubscribe_logo_url(self, value):
-        value = value.strip()
-        if value and not value.startswith("https://"):
-            raise serializers.ValidationError("Logo URL must start with https://")
+    def validate_unsubscribe_logo(self, value):
+        if value and value.size > 2 * 1024 * 1024:
+            raise serializers.ValidationError("Logo image must be 2 MB or smaller.")
         return value
 
 

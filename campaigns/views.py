@@ -46,7 +46,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
 from accounts.mailgun_secrets import decrypt_mailgun_secret
-from accounts.models import TenantMailgunSettings
+from accounts.models import Tenant, TenantMailgunSettings
 
 from campaigns.serializers import (
     BatchLeadSerializer,
@@ -1558,18 +1558,43 @@ class EmailLogListView(APIView):
 
 
 class EmailCampaignSettingsView(APIView):
+    def _tenant_id(self, request):
+        if request.user.is_superuser:
+            try:
+                tenant_id = int(request.query_params.get("tenant_id", ""))
+            except (TypeError, ValueError):
+                return None
+            if not Tenant.objects.filter(pk=tenant_id).exists():
+                return None
+            return tenant_id
+        return request.user.tenant_id
+
     def get(self, request):
+        tenant_id = self._tenant_id(request)
+        if tenant_id is None:
+            return Response(
+                {"detail": "A valid tenant_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         campaign_settings, _ = EmailCampaignSettings.objects.get_or_create(
-            tenant_id=request.user.tenant_id
+            tenant_id=tenant_id
         )
         return Response(
-            EmailCampaignSettingsSerializer(campaign_settings).data,
+            EmailCampaignSettingsSerializer(
+                campaign_settings, context={"request": request}
+            ).data,
             status=status.HTTP_200_OK,
         )
 
     def patch(self, request):
+        tenant_id = self._tenant_id(request)
+        if tenant_id is None:
+            return Response(
+                {"detail": "A valid tenant_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         campaign_settings, _ = EmailCampaignSettings.objects.get_or_create(
-            tenant_id=request.user.tenant_id
+            tenant_id=tenant_id
         )
         serializer = EmailCampaignSettingsSerializer(
             campaign_settings,
@@ -2305,7 +2330,11 @@ def campaign_unsubscribe(request, token):
         "support_email": campaign_settings.unsubscribe_support_email if campaign_settings else "",
         "company_address": campaign_settings.unsubscribe_company_address if campaign_settings else "",
         "brand_color": campaign_settings.unsubscribe_brand_color if campaign_settings else "",
-        "logo_url": campaign_settings.unsubscribe_logo_url if campaign_settings else "",
+        "logo_url": (
+            campaign_settings.unsubscribe_logo.url
+            if campaign_settings and campaign_settings.unsubscribe_logo
+            else campaign_settings.unsubscribe_logo_url if campaign_settings else ""
+        ),
         "masked_email": masked_email,
     }
 
