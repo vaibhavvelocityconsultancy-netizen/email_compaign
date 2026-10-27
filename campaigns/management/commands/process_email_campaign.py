@@ -158,11 +158,7 @@ class Command(BaseCommand):
         active_batches = Batch.objects.filter(
             status=Batch.Status.ACTIVE,
             sequence__channel=Channel.EMAIL,
-            status=Batch.Status.ACTIVE,
-            sequence__channel=Channel.EMAIL,
         ).select_related("sequence")
-        if batch_id is not None:
-            active_batches = active_batches.filter(pk=batch_id)
         if batch_id is not None:
             active_batches = active_batches.filter(pk=batch_id)
 
@@ -222,7 +218,6 @@ class Command(BaseCommand):
                 logger.info("No active email campaigns are due for processing.")
                 message = "No active batches found."
             self.stdout.write(
-                self.style.WARNING(message)
                 self.style.WARNING(message)
             )
             return
@@ -315,75 +310,7 @@ class Command(BaseCommand):
             for batch_lead in batch_leads:
 
                 step = None
-                step = None
                 try:
-                    if not batch_lead.email:
-                        current_email = (
-                            batch_lead.lead.contact.email
-                            if batch_lead.lead.contact
-                            else ""
-                        ) or batch_lead.lead.email
-                        current_email = (current_email or "").strip()
-                        if current_email:
-                            batch_lead.email = current_email
-                            batch_lead.save(update_fields=["email"])
-
-                    if batch_lead.replied:
-                        logger.info(
-                            "SKIP batch %s lead %s: recipient has replied.",
-                            batch.pk,
-                            batch_lead.lead_id,
-                        )
-                        continue
-                    if batch_lead.unsubscribed:
-                        logger.info(
-                            "SKIP batch %s lead %s: recipient is unsubscribed.",
-                            batch.pk,
-                            batch_lead.lead_id,
-                        )
-                        continue
-                    if batch_lead.completed:
-                        logger.info(
-                            "SKIP batch %s lead %s: sequence is already completed.",
-                            batch.pk,
-                            batch_lead.lead_id,
-                        )
-                        continue
-
-                    if not batch_lead.email:
-                        logger.warning(
-                            "SKIP batch %s lead %s: no recipient email is available.",
-                            batch.pk,
-                            batch_lead.lead_id,
-                        )
-                        self.stdout.write(
-                            self.style.WARNING(
-                                f"SKIP lead {batch_lead.lead_id}: no recipient email is available."
-                            )
-                        )
-                        continue
-
-                    if batch_lead.unsubscribed or is_email_suppressed(
-                        batch_lead.email,
-                        tenant_id=batch.tenant_id,
-                    ):
-                        if not batch_lead.unsubscribed:
-                            batch_lead.unsubscribed = True
-                            batch_lead.unsubscribed_at = timezone.now()
-                            batch_lead.save(
-                                update_fields=["unsubscribed", "unsubscribed_at"]
-                            )
-                        logger.warning(
-                            "event=email_send.skipped campaign_id=%s lead_id=%s reason=suppressed",
-                            batch.pk,
-                            batch_lead.lead_id,
-                        )
-                        self.stdout.write(
-                            self.style.WARNING(
-                                f"SKIP {batch_lead.email} - recipient is unsubscribed"
-                            )
-                        )
-                        continue
                     if not batch_lead.email:
                         current_email = (
                             batch_lead.lead.contact.email
@@ -741,6 +668,13 @@ class Command(BaseCommand):
                         '<a href="{}">unsubscribe here</a>.</p>',
                         unsubscribe_url,
                     )
+                    unsubscribe_url = get_unsubscribe_url(batch_lead)
+                    body += format_html(
+                        '<br><br><p style="color:#666;font-size:12px;">'
+                        'If you no longer want to receive these emails, '
+                        '<a href="{}">unsubscribe here</a>.</p>',
+                        unsubscribe_url,
+                    )
                     # --------------------------------
                     # CREATE EMAIL
                     # --------------------------------
@@ -778,8 +712,6 @@ class Command(BaseCommand):
                         body=body,
                         from_email=from_email,
                         to=[batch_lead.email],
-                        reply_to=[reply_to_email],
-                        connection=tenant_connection,
                         reply_to=[reply_to_email],
                         connection=tenant_connection,
                     )
