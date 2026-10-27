@@ -12,6 +12,7 @@ from googleapiclient.errors import HttpError
 from oauthlib.oauth2 import OAuth2Error
 from requests import RequestException
 
+from .mailgun_secrets import get_encryption_key
 from campaigns.models import GmailMailbox
 
 GMAIL_SCOPES = [
@@ -35,7 +36,7 @@ def _validate_configuration():
             ("GMAIL_OAUTH_CLIENT_ID", settings.GMAIL_OAUTH_CLIENT_ID),
             ("GMAIL_OAUTH_CLIENT_SECRET", settings.GMAIL_OAUTH_CLIENT_SECRET),
             ("GMAIL_OAUTH_REDIRECT_URI", settings.GMAIL_OAUTH_REDIRECT_URI),
-            ("GMAIL_TOKEN_ENCRYPTION_KEY", settings.GMAIL_TOKEN_ENCRYPTION_KEY),
+            ("GMAIL_TOKEN_ENCRYPTION_KEY", get_encryption_key()),
         )
         if not value
     ]
@@ -48,7 +49,7 @@ def _validate_configuration():
 def _fernet():
     _validate_configuration()
     try:
-        return Fernet(settings.GMAIL_TOKEN_ENCRYPTION_KEY.encode("ascii"))
+        return Fernet(get_encryption_key().encode("ascii"))
     except (ValueError, UnicodeEncodeError) as error:
         raise GmailOAuthConfigurationError(
             "GMAIL_TOKEN_ENCRYPTION_KEY must be a valid Fernet key."

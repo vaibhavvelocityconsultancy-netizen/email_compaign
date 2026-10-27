@@ -1,10 +1,19 @@
+import os
+
 from cryptography.fernet import Fernet
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 
 
+def get_encryption_key():
+    key = getattr(settings, "GMAIL_TOKEN_ENCRYPTION_KEY", "") or os.environ.get(
+        "GMAIL_TOKEN_ENCRYPTION_KEY", ""
+    )
+    return key.strip()
+
+
 def _fernet():
-    key = settings.GMAIL_TOKEN_ENCRYPTION_KEY
+    key = get_encryption_key()
     if not key:
         raise ImproperlyConfigured(
             "GMAIL_TOKEN_ENCRYPTION_KEY must be configured to store Mailgun secrets."
