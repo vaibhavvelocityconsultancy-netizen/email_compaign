@@ -339,12 +339,6 @@ class Batch(TenantOwnedModel):
 class EmailCampaignSettings(TenantOwnedModel):
     id = models.BigAutoField(primary_key=True)
     reply_to_email = models.EmailField(blank=True)
-    unsubscribe_company_name = models.CharField(max_length=120, blank=True, default="")
-    unsubscribe_support_email = models.EmailField(blank=True, default="")
-    unsubscribe_company_address = models.CharField(max_length=255, blank=True, default="")
-    unsubscribe_brand_color = models.CharField(max_length=7, blank=True, default="")
-    unsubscribe_logo_url = models.URLField(max_length=500, blank=True, default="")
-    unsubscribe_logo = models.ImageField(upload_to="unsubscribe_logos/", blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -357,6 +351,20 @@ class EmailCampaignSettings(TenantOwnedModel):
 
     def __str__(self):
         return "Email campaign settings"
+
+
+class UnsubscribePageSettings(models.Model):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    unsubscribe_company_name = models.CharField(max_length=120, blank=True, default="")
+    unsubscribe_support_email = models.EmailField(blank=True, default="")
+    unsubscribe_company_address = models.CharField(max_length=255, blank=True, default="")
+    unsubscribe_brand_color = models.CharField(max_length=7, blank=True, default="")
+    unsubscribe_logo_url = models.URLField(max_length=500, blank=True, default="")
+    unsubscribe_logo = models.ImageField(upload_to="unsubscribe_logos/", blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return "Global unsubscribe page settings"
 
 
 class BatchLead(models.Model):

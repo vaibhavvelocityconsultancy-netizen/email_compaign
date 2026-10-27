@@ -24,6 +24,7 @@ from .models import (
     Sequence,
     SequenceStep,
     State,
+    UnsubscribePageSettings,
     Lead,
     Task,
     TaskAttachment,
@@ -704,8 +705,14 @@ class BatchSerializer(TenantScopedModelSerializer):
 class EmailCampaignSettingsSerializer(TenantScopedModelSerializer):
     class Meta:
         model = EmailCampaignSettings
+        fields = ["reply_to_email", "updated_at"]
+        read_only_fields = ["updated_at"]
+
+
+class UnsubscribePageSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UnsubscribePageSettings
         fields = [
-            "reply_to_email",
             "unsubscribe_company_name",
             "unsubscribe_support_email",
             "unsubscribe_company_address",
@@ -714,20 +721,6 @@ class EmailCampaignSettingsSerializer(TenantScopedModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["updated_at"]
-
-    def get_fields(self):
-        fields = super().get_fields()
-        request = self.context.get("request")
-        if request and not request.user.is_superuser:
-            for name in (
-                "unsubscribe_company_name",
-                "unsubscribe_support_email",
-                "unsubscribe_company_address",
-                "unsubscribe_brand_color",
-                "unsubscribe_logo",
-            ):
-                fields[name].read_only = True
-        return fields
 
     def validate_unsubscribe_brand_color(self, value):
         value = value.strip()

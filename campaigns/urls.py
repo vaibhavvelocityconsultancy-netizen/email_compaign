@@ -10,6 +10,7 @@ from .views import (
     CompanyListView,
     CountryViewSet,
     EmailCampaignSettingsView,
+    UnsubscribePageSettingsView,
     EmailLogListView,
     EmailSequenceStepViewSet,
     EmailSequenceViewSet,
@@ -180,6 +181,11 @@ urlpatterns = [
         "email-campaign-settings/",
         EmailCampaignSettingsView.as_view(),
         name="email-campaign-settings",
+    ),
+    path(
+        "unsubscribe-page-settings/",
+        UnsubscribePageSettingsView.as_view(),
+        name="unsubscribe-page-settings",
     ),
     path(
         "inbound-replies/",

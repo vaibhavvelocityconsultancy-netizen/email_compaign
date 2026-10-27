@@ -14,7 +14,7 @@ from rest_framework.response import Response
 from rest_framework import generics, viewsets, status
 
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import BasePermission, IsAuthenticated
 
 # Create your views here.
 
@@ -56,6 +56,7 @@ from campaigns.serializers import (
     CompanySerializer,
     CountrySerializer,
     EmailCampaignSettingsSerializer,
+    UnsubscribePageSettingsSerializer,
     MessageLogSerializer,
     SequenceSerializer,
     SequenceStepSerializer,
@@ -80,6 +81,7 @@ from .models import (
     CompanyContact,
     Country,
     EmailCampaignSettings,
+    UnsubscribePageSettings,
     EmailSuppression,
     InboundReply,
     MessageLog,
@@ -1607,6 +1609,37 @@ class EmailCampaignSettingsView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+class IsSuperuserOnly(BasePermission):
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated and request.user.is_superuser)
+
+
+class UnsubscribePageSettingsView(APIView):
+    permission_classes = [IsSuperuserOnly]
+
+    @staticmethod
+    def _settings():
+        settings_object, _ = UnsubscribePageSettings.objects.get_or_create(pk=1)
+        return settings_object
+
+    def get(self, request):
+        serializer = UnsubscribePageSettingsSerializer(
+            self._settings(), context={"request": request}
+        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request):
+        serializer = UnsubscribePageSettingsSerializer(
+            self._settings(),
+            data=request.data,
+            partial=True,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 class InboundReplyListView(APIView):
     def get(self, request):
         replies = InboundReply.objects.filter(
@@ -2320,9 +2353,7 @@ def campaign_unsubscribe(request, token):
             "This unsubscribe link is invalid or no longer valid.", status=404
         )
 
-    campaign_settings = EmailCampaignSettings.objects.filter(
-        tenant_id=batch_lead.batch.tenant_id
-    ).first()
+    campaign_settings = UnsubscribePageSettings.objects.filter(pk=1).first()
     local, _, domain = (batch_lead.email or "").partition("@")
     masked_email = f"{local[:1]}***@{domain}" if domain else ""
     page_context = {
