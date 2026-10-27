@@ -668,13 +668,6 @@ class Command(BaseCommand):
                         '<a href="{}">unsubscribe here</a>.</p>',
                         unsubscribe_url,
                     )
-                    unsubscribe_url = get_unsubscribe_url(batch_lead)
-                    body += format_html(
-                        '<br><br><p style="color:#666;font-size:12px;">'
-                        'If you no longer want to receive these emails, '
-                        '<a href="{}">unsubscribe here</a>.</p>',
-                        unsubscribe_url,
-                    )
                     # --------------------------------
                     # CREATE EMAIL
                     # --------------------------------

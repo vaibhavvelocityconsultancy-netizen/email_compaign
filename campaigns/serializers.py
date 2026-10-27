@@ -1,3 +1,5 @@
+import re
+
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
@@ -596,6 +598,11 @@ class BatchSerializer(TenantScopedModelSerializer):
         required=False,
         write_only=True,
     )
+    template = serializers.PrimaryKeyRelatedField(
+        queryset=MessageTemplate.objects.all(),
+        required=False,
+        write_only=True,
+    )
 
     class Meta:
         model = Batch
@@ -603,12 +610,26 @@ class BatchSerializer(TenantScopedModelSerializer):
             "id",
             "name",
             "sequence",
+            "template",
             "reply_to_email",
             "lead_ids",
             "status",
             "created_at",
         ]
         read_only_fields = ["id", "created_at", "reply_to_email"]
+
+    def validate(self, attrs):
+        template = attrs.get("template")
+        if self.instance is None and template is not None:
+            if attrs.get("sequence"):
+                raise serializers.ValidationError(
+                    {"template": "Choose a sequence or a template, not both."}
+                )
+            if template.channel != Channel.EMAIL:
+                raise serializers.ValidationError(
+                    {"template": "Choose an email template."}
+                )
+        return attrs
 
     @staticmethod
     def _make_batch_leads(batch, leads, existing_ids=None):
@@ -650,12 +671,26 @@ class BatchSerializer(TenantScopedModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         leads = validated_data.pop("lead_ids", [])
+        template = validated_data.pop("template", None)
+        if template is not None and not validated_data.get("sequence"):
+            sequence = Sequence.objects.create(
+                name=f"{validated_data['name']} - One-time email",
+                channel=Channel.EMAIL,
+                tenant_id=validated_data["tenant_id"],
+            )
+            SequenceStep.objects.create(
+                sequence=sequence,
+                step_number=1,
+                template=template,
+            )
+            validated_data["sequence"] = sequence
         batch = super().create(validated_data)
         BatchLead.objects.bulk_create(self._make_batch_leads(batch, leads))
         return batch
 
     @transaction.atomic
     def update(self, instance, validated_data):
+        validated_data.pop("template", None)
         leads = validated_data.pop("lead_ids", None)
         batch = super().update(instance, validated_data)
         if leads is not None:
@@ -669,8 +704,28 @@ class BatchSerializer(TenantScopedModelSerializer):
 class EmailCampaignSettingsSerializer(TenantScopedModelSerializer):
     class Meta:
         model = EmailCampaignSettings
-        fields = ["reply_to_email", "updated_at"]
+        fields = [
+            "reply_to_email",
+            "unsubscribe_company_name",
+            "unsubscribe_support_email",
+            "unsubscribe_company_address",
+            "unsubscribe_brand_color",
+            "unsubscribe_logo_url",
+            "updated_at",
+        ]
         read_only_fields = ["updated_at"]
+
+    def validate_unsubscribe_brand_color(self, value):
+        value = value.strip()
+        if value and not re.fullmatch(r"#[0-9a-fA-F]{6}", value):
+            raise serializers.ValidationError("Use a hex color like #1f5eff.")
+        return value
+
+    def validate_unsubscribe_logo_url(self, value):
+        value = value.strip()
+        if value and not value.startswith("https://"):
+            raise serializers.ValidationError("Logo URL must start with https://")
+        return value
 
 
 class BatchLeadSerializer(TenantScopedModelSerializer):

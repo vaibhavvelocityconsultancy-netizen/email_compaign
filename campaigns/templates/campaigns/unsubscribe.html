@@ -6,7 +6,7 @@
     <meta name="robots" content="noindex, nofollow">
     <title>Unsubscribe from emails</title>
     <style>
-      :root { --brand: #1f5eff; --brand-dark: #1747c7; --text: #202a35; --muted: #667085; --border: #e4e7ec; }
+      :root { --brand: {{ brand_color|default:"#1f5eff" }}; --text: #202a35; --muted: #667085; --border: #e4e7ec; }
       * { box-sizing: border-box; }
       body { background: #f5f7fa; color: var(--text); font: 16px/1.5 Arial, Helvetica, sans-serif; margin: 0; padding: 16px; }
       main { background: #fff; border-radius: 12px; box-shadow: 0 4px 24px rgba(16, 24, 40, .08); margin: 8vh auto 0; max-width: 480px; padding: 32px; }
@@ -22,7 +22,7 @@
       textarea { border: 1px solid var(--border); border-radius: 6px; font: inherit; margin-top: 6px; min-height: 70px; padding: 10px; width: 100%; }
       .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
       button { background: var(--brand); border: 0; border-radius: 6px; color: #fff; cursor: pointer; font: inherit; font-weight: bold; padding: 12px 20px; }
-      button:hover { background: var(--brand-dark); }
+      button:hover { filter: brightness(.9); }
       .link { align-self: center; color: var(--muted); font-size: 14px; }
       footer { border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; margin-top: 28px; padding-top: 16px; }
       footer a { color: var(--brand); }
@@ -30,7 +30,11 @@
   </head>
   <body>
     <main>
-      <div class="brand">{{ company_name|default:"Your Company" }}</div>
+      {% if logo_url %}
+        <img src="{{ logo_url }}" alt="{{ company_name|default:'Logo' }}" style="max-height:40px;margin-bottom:20px">
+      {% else %}
+        <div class="brand">{{ company_name|default:"Your Company" }}</div>
+      {% endif %}
 
       {% if completed %}
         <div class="icon">✅</div>

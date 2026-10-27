@@ -339,6 +339,11 @@ class Batch(TenantOwnedModel):
 class EmailCampaignSettings(TenantOwnedModel):
     id = models.BigAutoField(primary_key=True)
     reply_to_email = models.EmailField(blank=True)
+    unsubscribe_company_name = models.CharField(max_length=120, blank=True, default="")
+    unsubscribe_support_email = models.EmailField(blank=True, default="")
+    unsubscribe_company_address = models.CharField(max_length=255, blank=True, default="")
+    unsubscribe_brand_color = models.CharField(max_length=7, blank=True, default="")
+    unsubscribe_logo_url = models.URLField(max_length=500, blank=True, default="")
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

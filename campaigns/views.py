@@ -2295,21 +2295,36 @@ def campaign_unsubscribe(request, token):
             "This unsubscribe link is invalid or no longer valid.", status=404
         )
 
+    campaign_settings = EmailCampaignSettings.objects.filter(
+        tenant_id=batch_lead.batch.tenant_id
+    ).first()
+    local, _, domain = (batch_lead.email or "").partition("@")
+    masked_email = f"{local[:1]}***@{domain}" if domain else ""
+    page_context = {
+        "company_name": campaign_settings.unsubscribe_company_name if campaign_settings else "",
+        "support_email": campaign_settings.unsubscribe_support_email if campaign_settings else "",
+        "company_address": campaign_settings.unsubscribe_company_address if campaign_settings else "",
+        "brand_color": campaign_settings.unsubscribe_brand_color if campaign_settings else "",
+        "logo_url": campaign_settings.unsubscribe_logo_url if campaign_settings else "",
+        "masked_email": masked_email,
+    }
+
     if request.method == "GET":
+        page_context.update(
+            already_unsubscribed=(
+                batch_lead.unsubscribed
+                or is_email_suppressed(
+                    batch_lead.email,
+                    tenant_id=batch_lead.batch.tenant_id,
+                )
+            ),
+            completed=False,
+            mailgun_sync_failed=False,
+        )
         return render(
             request,
             "campaigns/unsubscribe.html",
-            {
-                "already_unsubscribed": (
-                    batch_lead.unsubscribed
-                    or is_email_suppressed(
-                        batch_lead.email,
-                        tenant_id=batch_lead.batch.tenant_id,
-                    )
-                ),
-                "completed": False,
-                "mailgun_sync_failed": False,
-            },
+            page_context,
         )
 
     record_unsubscribe(
@@ -2333,14 +2348,15 @@ def campaign_unsubscribe(request, token):
         logger.exception("Could not sync an unsubscribe to Mailgun.")
         mailgun_sync_failed = True
 
+    page_context.update(
+        already_unsubscribed=False,
+        completed=True,
+        mailgun_sync_failed=mailgun_sync_failed,
+    )
     return render(
         request,
         "campaigns/unsubscribe.html",
-        {
-            "already_unsubscribed": False,
-            "completed": True,
-            "mailgun_sync_failed": mailgun_sync_failed,
-        },
+        page_context,
     )
 
 def _is_valid_mailgun_signature(signature_data):
