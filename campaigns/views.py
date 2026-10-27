@@ -632,6 +632,18 @@ class LeadCSVImportView(APIView):
                 category_name = (
                     row.get("category") or row.get("category_name") or ""
                 ).strip()
+                contact_email = data["contact_email"]
+                if not contact_email:
+                    invalid += 1
+                    row_errors.append(
+                        {
+                            "row": total_rows + 1,
+                            "errors": {
+                                "contact_email": ["This field is required."]
+                            },
+                        }
+                    )
+                    continue
                 if category_name:
                     category, _ = LeadCategory.objects.get_or_create(
                         tenant_id=request.user.tenant_id,
@@ -639,8 +651,7 @@ class LeadCSVImportView(APIView):
                         defaults={"name": category_name},
                     )
                     data["category"] = category.pk
-                contact_email = data["contact_email"]
-                if contact_email and Lead.objects.filter(
+                if Lead.objects.filter(
                     tenant_id=request.user.tenant_id,
                     is_active=True,
                 ).filter(
