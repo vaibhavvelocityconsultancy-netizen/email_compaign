@@ -25,11 +25,12 @@ urlpatterns = [
     path("api/", include("campaigns.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
-if settings.LOCAL_URL_PREFIX:
-    prefixed_api = f"{settings.LOCAL_URL_PREFIX}/api/"
+local_url_prefix = getattr(settings, "LOCAL_URL_PREFIX", "email_backend_crm").strip("/")
+if local_url_prefix:
+    prefixed_api = f"{local_url_prefix}/api/"
     urlpatterns += [
         path(
-            f"{settings.LOCAL_URL_PREFIX}/api/auth/",
+            f"{local_url_prefix}/api/auth/",
             include("accounts.urls", namespace="prefixed_accounts"),
         ),
         path(prefixed_api, include("campaigns.urls")),
