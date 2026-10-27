@@ -2343,19 +2343,23 @@ def campaign_unsubscribe(request, token):
         },
     )
 
-
 def _is_valid_mailgun_signature(signature_data):
     signing_keys = [
-        getattr(settings, "ANYMAIL", {}).get(
-            "MAILGUN_WEBHOOK_SIGNING_KEY", ""
-        )
+        getattr(settings, "ANYMAIL", {}).get("MAILGUN_WEBHOOK_SIGNING_KEY", "")
     ]
-    signing_keys.extend(
-        decrypt_mailgun_secret(encrypted_key)
-        for encrypted_key in TenantMailgunSettings.objects.exclude(
-            encrypted_webhook_signing_key=""
-        ).values_list("encrypted_webhook_signing_key", flat=True)
-    )
+    encrypted_keys = TenantMailgunSettings.objects.exclude(
+        encrypted_webhook_signing_key=""
+    ).values_list("tenant_id", "encrypted_webhook_signing_key")
+
+    for tenant_id, encrypted_key in encrypted_keys:
+        try:
+            signing_keys.append(decrypt_mailgun_secret(encrypted_key))
+        except Exception:
+            email_campaign_logger.warning(
+                "event=mailgun_webhook.tenant_key_undecryptable tenant_id=%s",
+                tenant_id,
+            )
+
     timestamp = str(signature_data.get("timestamp", ""))
     token = str(signature_data.get("token", ""))
     signature = str(signature_data.get("signature", ""))
@@ -2365,15 +2369,13 @@ def _is_valid_mailgun_signature(signature_data):
 
     signed_data = f"{timestamp}{token}".encode()
     return any(
-        signing_key
+        key
         and hmac.compare_digest(
             signature,
-            hmac.new(signing_key.encode(), signed_data, hashlib.sha256).hexdigest(),
+            hmac.new(key.encode(), signed_data, hashlib.sha256).hexdigest(),
         )
-        for signing_key in signing_keys
+        for key in signing_keys
     )
-
-
 @csrf_exempt
 def mailgun_webhook(request):
     if request.method != "POST":
