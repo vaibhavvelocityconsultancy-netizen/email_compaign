@@ -8,6 +8,7 @@ from .views import (
     LoginView,
     LogoutView,
     ModuleViewSet,
+    OwnTenantMailgunSettingsView,
     RefreshView,
     RegisterView,
     RolePermissionViewSet,
@@ -31,6 +32,11 @@ urlpatterns = [
     path("refresh/", RefreshView.as_view(), name="refresh"),
     path("logout/", LogoutView.as_view(), name="logout"),
     path("me/", CurrentUserView.as_view(), name="me"),
+    path(
+        "mailgun-settings/",
+        OwnTenantMailgunSettingsView.as_view(),
+        name="own-mailgun-settings",
+    ),
     path("mailgun-settings/tenants/", TenantMailgunSettingsListView.as_view(), name="mailgun-settings-tenants"),
     path(
         "mailgun-settings/tenants/<int:tenant_id>/",

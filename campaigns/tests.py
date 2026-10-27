@@ -22,6 +22,7 @@ from .models import (
     Company,
     CompanyContact,
     Country,
+    EmailCampaignSettings,
     Lead,
     MessageTemplate,
     Opportunity,
@@ -394,7 +395,7 @@ class CampaignSendNowApiTests(TestCase):
 		DEFAULT_FROM_EMAIL="CRM <sender@example.com>",
 	)
 	@patch("campaigns.management.commands.process_email_campaign.save_to_sent")
-	def test_force_sends_next_step_using_campaign_reply_to(self, _save_to_sent):
+	def test_force_sends_next_step_using_global_reply_to(self, _save_to_sent):
 		first_template = MessageTemplate.objects.create(
 			name="First step",
 			subject="First",
@@ -419,6 +420,9 @@ class CampaignSendNowApiTests(TestCase):
 		self.batch_lead.current_step = 1
 		self.batch_lead.last_email_sent_at = timezone.now()
 		self.batch_lead.save(update_fields=["current_step", "last_email_sent_at"])
+		EmailCampaignSettings.objects.create(
+			reply_to_email="global-replies@example.com"
+		)
 
 		with self.settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend"):
 			call_command(
@@ -432,10 +436,47 @@ class CampaignSendNowApiTests(TestCase):
 		from django.core import mail
 
 		self.assertEqual(len(mail.outbox), 1)
-		self.assertEqual(mail.outbox[0].reply_to, ["replies@example.com"])
+		self.assertEqual(
+			mail.outbox[0].reply_to,
+			["global-replies@example.com"],
+		)
 		self.batch_lead.refresh_from_db()
 		self.assertEqual(self.batch_lead.current_step, 2)
 		self.assertTrue(self.batch_lead.completed)
+
+
+class EmailCampaignSettingsApiTests(TestCase):
+	def setUp(self):
+		user = get_user_model().objects.create_user(
+			username="email-campaign-settings",
+			email="email-campaign-settings@example.com",
+			password="test-only-password",
+		)
+		self.client = APIClient()
+		self.client.force_authenticate(user=user)
+
+	def test_global_reply_to_is_saved_and_returned(self):
+		response = self.client.patch(
+			"/api/email-campaign-settings/",
+			{"reply_to_email": "replies@example.com"},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertEqual(response.data["reply_to_email"], "replies@example.com")
+		self.assertEqual(
+			EmailCampaignSettings.objects.get(pk=1).reply_to_email,
+			"replies@example.com",
+		)
+
+	def test_global_reply_to_rejects_invalid_email(self):
+		response = self.client.patch(
+			"/api/email-campaign-settings/",
+			{"reply_to_email": "not-an-email"},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 400)
 
 
 class FinalOfferGenerationTests(TestCase):

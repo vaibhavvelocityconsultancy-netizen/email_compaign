@@ -67,6 +67,37 @@ class TenantMailgunSettingsListView(APIView):
         ])
 
 
+class OwnTenantMailgunSettingsView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        tenant = request.user.tenant
+        settings_instance = TenantMailgunSettings.objects.filter(tenant=tenant).first()
+        if settings_instance is None:
+            return Response({
+                "tenant": tenant.id,
+                "tenant_name": tenant.name,
+                "default_from_email": "",
+                "reply_to_email": "",
+                "sender_domain": "",
+                "has_api_key": False,
+                "has_webhook_signing_key": False,
+            })
+        return Response(TenantMailgunSettingsSerializer(settings_instance).data)
+
+    def put(self, request):
+        tenant = request.user.tenant
+        settings_instance = TenantMailgunSettings.objects.filter(tenant=tenant).first()
+        serializer = TenantMailgunSettingsSerializer(
+            settings_instance,
+            data=request.data,
+            partial=settings_instance is not None,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save(tenant=tenant)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 class TenantMailgunSettingsDetailView(APIView):
     permission_classes = [IsSuperUser]
 
@@ -78,6 +109,7 @@ class TenantMailgunSettingsDetailView(APIView):
                 "tenant": tenant.id,
                 "tenant_name": tenant.name,
                 "default_from_email": "",
+                "reply_to_email": "",
                 "sender_domain": "",
                 "has_api_key": False,
                 "has_webhook_signing_key": False,

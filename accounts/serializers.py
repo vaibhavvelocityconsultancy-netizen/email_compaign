@@ -51,6 +51,7 @@ class TenantMailgunSettingsSerializer(serializers.ModelSerializer):
             "tenant",
             "tenant_name",
             "default_from_email",
+            "reply_to_email",
             "sender_domain",
             "api_key",
             "webhook_signing_key",

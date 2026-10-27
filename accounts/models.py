@@ -21,6 +21,7 @@ class TenantMailgunSettings(models.Model):
         related_name="mailgun_settings",
     )
     default_from_email = models.CharField(max_length=320)
+    reply_to_email = models.EmailField(blank=True, default="")
     sender_domain = models.CharField(max_length=255)
     encrypted_api_key = models.TextField(blank=True)
     encrypted_webhook_signing_key = models.TextField(blank=True)

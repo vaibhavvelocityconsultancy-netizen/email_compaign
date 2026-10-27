@@ -521,12 +521,18 @@ class Command(BaseCommand):
                     )
 
                     reply_to_email = (
-                        EmailCampaignSettings.objects.filter(
-                            tenant_id=batch.tenant_id
-                        )
-                        .values_list("reply_to_email", flat=True)
-                        .first()
+                        mailgun_settings.reply_to_email
+                        if mailgun_settings is not None
+                        else ""
                     )
+                    if not reply_to_email:
+                        reply_to_email = (
+                            EmailCampaignSettings.objects.filter(
+                                tenant_id=batch.tenant_id
+                            )
+                            .values_list("reply_to_email", flat=True)
+                            .first()
+                        )
                     reply_to_email = (
                         reply_to_email
                         or getattr(settings, "MAILGUN_REPLY_TO", from_email)
@@ -614,7 +620,16 @@ class Command(BaseCommand):
                         continue
 
                     msg.send()
-                    mailgun_message_id = msg.message().get("Message-ID", "")
+                    mailgun_message_id = getattr(
+                        getattr(msg, "anymail_status", None),
+                        "message_id",
+                        None,
+                    )
+                    if not mailgun_message_id:
+                        raise RuntimeError(
+                            "Mailgun accepted the email without returning a provider message ID."
+                        )
+                    mailgun_message_id = str(mailgun_message_id).strip().strip("<>").lower()
 
                     # Save to IMAP Sent
                     save_to_sent(msg)
