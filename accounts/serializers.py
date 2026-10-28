@@ -38,6 +38,7 @@ class TenantMailgunSettingsSerializer(serializers.ModelSerializer):
     has_api_key = serializers.SerializerMethodField()
     has_webhook_signing_key = serializers.SerializerMethodField()
     default_from_email = serializers.CharField(max_length=320)
+    reply_to_email = serializers.CharField(max_length=320, required=False, allow_blank=True)
     api_key = serializers.CharField(write_only=True, required=False, allow_blank=False)
     webhook_signing_key = serializers.CharField(
         write_only=True,
@@ -85,6 +86,19 @@ class TenantMailgunSettingsSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "Enter an email address, optionally with a display name."
             ) from error
+        return value
+
+    def validate_reply_to_email(self, value):
+        value = (value or "").strip()
+        if not value:
+            return value
+        _, email_address = parseaddr(value)
+        if not email_address or " " in email_address:
+            raise serializers.ValidationError("Enter an email address, optionally with a display name.")
+        try:
+            validate_email(email_address)
+        except DjangoValidationError as error:
+            raise serializers.ValidationError("Enter a valid reply-to email address.") from error
         return value
 
     def validate_sender_domain(self, value):

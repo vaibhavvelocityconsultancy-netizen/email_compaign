@@ -6,7 +6,7 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
-from django.db import transaction
+from django.db import models, transaction
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
 from rest_framework.response import Response
@@ -46,6 +46,65 @@ class IsSuperUser(permissions.BasePermission):
             and request.user.is_authenticated
             and request.user.is_superuser
         )
+
+
+class SystemLogAdminListView(APIView):
+    permission_classes = [IsSuperUser]
+
+    def get(self, request):
+        from campaigns.models import SystemLog
+
+        queryset = SystemLog.objects.select_related("tenant").all()
+        level = request.query_params.get("level")
+        status_filter = request.query_params.get("status")
+        search = request.query_params.get("search", "").strip()
+        if level:
+            queryset = queryset.filter(level=level.upper())
+        if status_filter == "unread":
+            queryset = queryset.filter(is_read=False)
+        elif status_filter == "acknowledged":
+            queryset = queryset.filter(is_acknowledged=True)
+        if search:
+            queryset = queryset.filter(models.Q(message__icontains=search) | models.Q(logger_name__icontains=search) | models.Q(module__icontains=search))
+        queryset = queryset.order_by("-created_at")[:500]
+        return Response({
+            "results": [{
+                "id": log.id,
+                "tenant_id": log.tenant_id,
+                "tenant_name": log.tenant.name if log.tenant else None,
+                "level": log.level,
+                "logger_name": log.logger_name,
+                "module": log.module,
+                "message": log.message,
+                "source": log.source,
+                "is_notification": log.is_notification,
+                "is_read": log.is_read,
+                "is_acknowledged": log.is_acknowledged,
+                "created_at": log.created_at,
+            } for log in queryset],
+            "unread_notifications": SystemLog.objects.filter(is_notification=True, is_read=False).count(),
+        })
+
+
+class SystemLogAdminActionView(APIView):
+    permission_classes = [IsSuperUser]
+
+    def post(self, request, log_id):
+        from campaigns.models import SystemLog
+        log = get_object_or_404(SystemLog, pk=log_id)
+        action = request.data.get("action")
+        if action == "read":
+            log.is_read = True
+        elif action == "acknowledge":
+            log.is_acknowledged = True
+            log.is_read = True
+        elif action == "dismiss":
+            log.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        else:
+            return Response({"detail": "Invalid action."}, status=status.HTTP_400_BAD_REQUEST)
+        log.save(update_fields=["is_read", "is_acknowledged"])
+        return Response({"id": log.id, "is_read": log.is_read, "is_acknowledged": log.is_acknowledged})
 
 
 class TenantMailgunSettingsListView(APIView):

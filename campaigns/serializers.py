@@ -597,6 +597,7 @@ class SequenceStepSerializer(TenantScopedModelSerializer):
             "template",
             "delay_days",
             "delay_minutes",
+            "send_time",
         ]
         read_only_fields = ["id"]
 
@@ -619,6 +620,7 @@ class NestedSequenceStepSerializer(TenantScopedModelSerializer):
             "template",
             "delay_days",
             "delay_minutes",
+            "send_time",
         ]
         read_only_fields = ["id"]
         validators = []
@@ -879,6 +881,8 @@ class InboundReplySerializer(TenantScopedModelSerializer):
             "id",
             "status",
             "sender_email",
+            "recipient_email",
+            "subject",
             "received_at",
             "lead",
             "campaign",

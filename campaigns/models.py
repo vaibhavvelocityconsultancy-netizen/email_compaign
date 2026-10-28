@@ -19,6 +19,39 @@ class TenantOwnedModel(models.Model):
         abstract = True
 
 
+class SystemLog(models.Model):
+    class Level(models.TextChoices):
+        DEBUG = "DEBUG", "Debug"
+        INFO = "INFO", "Info"
+        WARNING = "WARNING", "Warning"
+        ERROR = "ERROR", "Error"
+        CRITICAL = "CRITICAL", "Critical"
+
+    tenant = models.ForeignKey(
+        "accounts.Tenant", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="system_logs",
+    )
+    level = models.CharField(max_length=10)
+    logger_name = models.CharField(max_length=255)
+    module = models.CharField(max_length=255, blank=True)
+    message = models.TextField()
+    source = models.CharField(max_length=255, blank=True)
+    is_notification = models.BooleanField(default=False)
+    is_read = models.BooleanField(default=False)
+    is_acknowledged = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["level", "created_at"]),
+            models.Index(fields=["is_notification", "is_read", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.level} {self.logger_name}: {self.message[:80]}"
+
+
 # Create your models here.
 class Company(TenantOwnedModel):
     id = models.BigAutoField(primary_key=True)
@@ -348,6 +381,7 @@ class SequenceStep(models.Model):
     template = models.ForeignKey(MessageTemplate, on_delete=models.CASCADE)
     delay_days = models.PositiveIntegerField(default=0)
     delay_minutes = models.IntegerField(default=0)
+    send_time = models.TimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["step_number"]

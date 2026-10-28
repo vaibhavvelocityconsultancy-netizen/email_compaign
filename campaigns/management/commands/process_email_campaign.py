@@ -5,7 +5,7 @@ from html import escape
 import logging
 from html import escape
 
-from datetime import timedelta
+from datetime import datetime, timedelta, time as datetime_time
 from email.mime.image import MIMEImage
 
 from django.conf import settings
@@ -94,6 +94,22 @@ def save_to_sent(msg):
     except Exception:
         # Do not fail the email campaign if saving to Sent fails
         pass
+
+
+def sequence_send_after(base_time, step):
+    if not step.send_time:
+        return base_time + timedelta(days=step.delay_days, minutes=step.delay_minutes)
+
+    scheduled_date = (base_time + timedelta(days=step.delay_days)).date()
+    scheduled_naive = datetime.combine(scheduled_date, step.send_time)
+    scheduled = (
+        timezone.make_aware(scheduled_naive, timezone.get_current_timezone())
+        if timezone.is_aware(base_time)
+        else scheduled_naive
+    )
+    if step.delay_days == 0 and step.delay_minutes == 0 and scheduled <= base_time:
+        return base_time
+    return scheduled + timedelta(minutes=step.delay_minutes)
 
 
 class Command(BaseCommand):
@@ -451,14 +467,7 @@ class Command(BaseCommand):
 
                             continue
 
-                        send_after = batch.created_at + timedelta(
-                            days=step.delay_days,
-                            minutes=step.delay_minutes
-                        )
-                        send_after = batch.created_at + timedelta(
-                            days=step.delay_days,
-                            minutes=step.delay_minutes
-                        )
+                        send_after = sequence_send_after(batch.created_at, step)
 
                     else:
 
@@ -483,13 +492,7 @@ class Command(BaseCommand):
 
                             continue
 
-                        send_after = (
-                            batch_lead.last_email_sent_at
-                            + timedelta(
-                                days=step.delay_days,
-                                minutes=step.delay_minutes
-                            )
-                        )
+                        send_after = sequence_send_after(batch_lead.last_email_sent_at, step)
 
                     # Not time yet
                     if send_after > now and not force:

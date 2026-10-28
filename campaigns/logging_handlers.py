@@ -4,6 +4,48 @@ from contextlib import contextmanager
 from logging.handlers import TimedRotatingFileHandler
 
 
+class DatabaseLogHandler(logging.Handler):
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            if record.levelno < logging.INFO:
+                return
+            from django.apps import apps
+            from django.db import connection
+            from django.db.utils import OperationalError, ProgrammingError
+
+            SystemLog = apps.get_model("campaigns", "SystemLog")
+            if SystemLog is None:
+                return
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1 FROM django_migrations WHERE app = %s LIMIT 1", ["campaigns"])
+
+            tenant = getattr(record, "tenant", None)
+            tenant_id = getattr(record, "tenant_id", None)
+            if tenant_id in (None, "none", "unknown", ""):
+                tenant_id = None
+            else:
+                try:
+                    tenant_id = int(tenant_id)
+                except (TypeError, ValueError):
+                    tenant_id = None
+
+            message = self.format(record)
+            level = record.levelname.upper()
+            SystemLog.objects.create(
+                level=level[:10],
+                logger_name=(record.name or "unknown")[:255],
+                module=(record.module or record.pathname.rsplit("\\", 1)[-1].rsplit("/", 1)[-1])[:255],
+                message=message[:10000],
+                source=(record.funcName or record.pathname)[:255],
+                tenant_id=tenant_id,
+                is_notification=record.levelno >= logging.ERROR,
+            )
+        except (OperationalError, ProgrammingError):
+            pass
+        except Exception:
+            self.handleError(record)
+
+
 class LatestFirstTimedRotatingFileHandler(TimedRotatingFileHandler):
     @contextmanager
     def _file_lock(self):

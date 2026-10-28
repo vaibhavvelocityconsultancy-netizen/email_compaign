@@ -11,6 +11,8 @@ from .views import (
     OwnTenantMailgunSettingsView,
     RefreshView,
     RegisterView,
+    SystemLogAdminActionView,
+    SystemLogAdminListView,
     RolePermissionViewSet,
     RoleViewSet,
     TenantAdminDetailView,
@@ -47,6 +49,8 @@ urlpatterns = [
     ),
     path("tenants/", TenantAdminListView.as_view(), name="tenant-admin-list"),
     path("tenants/<int:tenant_id>/", TenantAdminDetailView.as_view(), name="tenant-admin-detail"),
+    path("system-logs/", SystemLogAdminListView.as_view(), name="system-log-admin-list"),
+    path("system-logs/<int:log_id>/action/", SystemLogAdminActionView.as_view(), name="system-log-admin-action"),
     path("google/authorize/", GoogleAuthorizationView.as_view(), name="google-authorize"),
     path("google/callback/", GoogleCallbackView.as_view(), name="google-callback"),
 ] + router.urls

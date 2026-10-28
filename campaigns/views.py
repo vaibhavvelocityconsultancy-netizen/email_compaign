@@ -87,6 +87,7 @@ from .models import (
     EmailSignature,
     UnsubscribePageSettings,
     EmailSuppression,
+    GmailMailbox,
     InboundReply,
     MessageLog,
     Opportunity,
@@ -1727,15 +1728,71 @@ class InboundReplyListView(APIView):
 
 class InboundReplyDetailView(APIView):
     def get(self, request, pk):
-        reply = get_object_or_404(
+        reply = self._get_reply(request, pk)
+        return Response(InboundReplySerializer(reply).data, status=status.HTTP_200_OK)
+
+    def post(self, request, pk):
+        import base64
+        from email.message import EmailMessage
+        from email.utils import formataddr
+
+        from accounts.gmail_oauth import GmailOAuthError, get_gmail_service
+        from googleapiclient.errors import HttpError
+
+        reply = self._get_reply(request, pk)
+        body = str(request.data.get("body", "")).strip()
+        subject = str(request.data.get("subject", "")).strip()
+        if not body:
+            return Response({"detail": "Reply message is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        mailbox = GmailMailbox.objects.filter(tenant_id=request.user.tenant_id).exclude(encrypted_credentials="").first()
+        if mailbox is None:
+            return Response({"detail": "Connect and authorize a Gmail mailbox before sending replies."}, status=status.HTTP_400_BAD_REQUEST)
+
+        recipient = reply.sender_email.strip()
+        if not recipient:
+            return Response({"detail": "The reply sender address is missing."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not subject:
+            subject = reply.subject or "Re: Campaign email"
+        if not subject.casefold().startswith("re:"):
+            subject = f"Re: {subject}"
+
+        message = EmailMessage()
+        message["From"] = formataddr((mailbox.email, mailbox.email))
+        message["To"] = recipient
+        message["Subject"] = subject
+        if reply.message_id:
+            message["In-Reply-To"] = reply.message_id
+            message["References"] = reply.message_id
+        message.set_content(body)
+
+        try:
+            service = get_gmail_service(mailbox)
+            raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
+            sent = service.users().messages().send(
+                userId="me",
+                body={"raw": raw_message},
+            ).execute()
+        except (GmailOAuthError, HttpError) as error:
+            return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as error:
+            logger.exception("Failed to send Gmail reply to %s", recipient)
+            return Response({"detail": "The reply could not be sent."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        reply.batch_lead.replied = True
+        reply.batch_lead.replied_at = timezone.now()
+        reply.batch_lead.save(update_fields=["replied", "replied_at"])
+        return Response({"detail": "Reply sent successfully.", "message_id": sent.get("id", "")}, status=status.HTTP_200_OK)
+
+    @staticmethod
+    def _get_reply(request, pk):
+        return get_object_or_404(
             InboundReply.objects.filter(
                 batch_lead__batch__tenant_id=request.user.tenant_id
-            ).select_related(
-                "batch_lead__lead", "batch_lead__batch"
-            ),
+            ).select_related("batch_lead__lead", "batch_lead__batch"),
             pk=pk,
         )
-        return Response(InboundReplySerializer(reply).data, status=status.HTTP_200_OK)
 
 
 class EmailSignatureViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):

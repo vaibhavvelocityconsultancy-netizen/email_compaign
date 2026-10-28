@@ -220,7 +220,7 @@ def _process_message_data(mailbox, message, gmail_message_id):
                 "batch_lead": batch_lead,
                 "sender_email": sender,
                 "recipient_email": mailbox.email,
-                "subject": "",
+                "subject": headers.get("subject", ""),
                 "body_plain": "",
                 "body_html": "",
                 "message_id": dedupe_id,
