@@ -13,7 +13,7 @@ from django.core.management.base import BaseCommand
 from django.core.mail import EmailMultiAlternatives
 from django.db import transaction
 from django.utils.html import format_html
-from django.db import transaction
+# from django.db import transaction
 from django.utils.html import format_html
 from django.utils import timezone
 from anymail.backends.mailgun import EmailBackend

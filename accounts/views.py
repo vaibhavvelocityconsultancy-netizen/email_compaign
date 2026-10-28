@@ -86,6 +86,16 @@ class SystemLogAdminListView(APIView):
         })
 
 
+class SystemLogAdminMarkAllReadView(APIView):
+    permission_classes = [IsSuperUser]
+
+    def post(self, request):
+        from campaigns.models import SystemLog
+
+        updated = SystemLog.objects.filter(is_read=False).update(is_read=True)
+        return Response({"updated": updated})
+
+
 class SystemLogAdminActionView(APIView):
     permission_classes = [IsSuperUser]
 
