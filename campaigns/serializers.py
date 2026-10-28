@@ -13,6 +13,7 @@ from .models import (
     Country,
     EmailSuppression,
     EmailCampaignSettings,
+    EmailSignature,
     LeadCategory,
     InboundReply,
     MessageLog,
@@ -513,8 +514,24 @@ class LeadSerializer(TenantScopedModelSerializer):
       
 
 # -------- message template serializer ----------------------------
+class EmailSignatureSerializer(TenantScopedModelSerializer):
+    class Meta:
+        model = EmailSignature
+        fields = [
+            "id", "name", "text", "logo", "is_default", "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        attrs["tenant_id"] = self.context["request"].user.tenant_id
+        return attrs
+
+
 class MessageTemplateSerializer(TenantScopedModelSerializer):
     category_name = serializers.SerializerMethodField()
+    signature_profile = serializers.PrimaryKeyRelatedField(
+        queryset=EmailSignature.objects.all(), required=False, allow_null=True,
+    )
 
     class Meta:
         model = MessageTemplate
@@ -527,6 +544,7 @@ class MessageTemplateSerializer(TenantScopedModelSerializer):
             "subject",
             "body",
             "signature",
+            "signature_profile",
             "logo",
             "attachment",
             "wa_template_name",
@@ -539,6 +557,29 @@ class MessageTemplateSerializer(TenantScopedModelSerializer):
 
     def get_category_name(self, instance):
         return instance.category.name if instance.category else ""
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        tenant_id = request.user.tenant_id if request else None
+        signature_profile_provided = "signature_profile" in attrs
+        signature = attrs.get("signature_profile")
+        if signature is not None and signature.tenant_id != tenant_id:
+            raise serializers.ValidationError({"signature_profile": "Choose a signature from this account."})
+        if not signature_profile_provided:
+            signature = EmailSignature.objects.filter(
+                tenant_id=tenant_id, is_default=True
+            ).first()
+            if signature is not None:
+                attrs["signature_profile"] = signature
+        elif signature is None:
+            attrs["signature"] = ""
+            attrs["logo"] = None
+            return attrs
+        if signature is not None:
+            attrs["signature_profile"] = signature
+            attrs["signature"] = signature.text
+            attrs["logo"] = signature.logo if signature.logo else None
+        return attrs
 
 
 class SequenceStepSerializer(TenantScopedModelSerializer):

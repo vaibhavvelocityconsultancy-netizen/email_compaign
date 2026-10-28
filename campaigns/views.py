@@ -1,6 +1,7 @@
 from decimal import Decimal, InvalidOperation
 from io import BytesIO, StringIO
 from textwrap import wrap
+from openpyxl import load_workbook
 
 from django.core.files.base import ContentFile
 from django.core.management import call_command
@@ -56,6 +57,7 @@ from campaigns.serializers import (
     CompanySerializer,
     CountrySerializer,
     EmailCampaignSettingsSerializer,
+    EmailSignatureSerializer,
     UnsubscribePageSettingsSerializer,
     MessageLogSerializer,
     SequenceSerializer,
@@ -82,6 +84,7 @@ from .models import (
     CompanyContact,
     Country,
     EmailCampaignSettings,
+    EmailSignature,
     UnsubscribePageSettings,
     EmailSuppression,
     InboundReply,
@@ -111,6 +114,8 @@ from campaigns.unsubscribe import (
 logger = logging.getLogger(__name__)
 email_campaign_logger = logging.getLogger("email_campaign")
 
+
+# ----------------------------- utility functions ----------------------
 
 def _tenant_queryset(queryset, request, tenant_path="tenant"):
     tenant_id = getattr(request.user, "tenant_id", None)
@@ -159,8 +164,6 @@ def _spreadsheet_cell_value(value):
 
 # ------------------------------------- masters ----------------------
 
-
-# company
 
 
 class CountryViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
@@ -244,7 +247,7 @@ class CompanyContactDetailView(generics.RetrieveUpdateDestroyAPIView):
         instance.is_active = False
         instance.save(update_fields=["is_active"])
 
-
+# task and activity views
 def _task_queryset_for_user(user):
     queryset = (
         Task.objects.filter(is_deleted=False, tenant_id=user.tenant_id)
@@ -270,7 +273,7 @@ def _add_task_attachments(task, request):
             ),
         )
 
-
+# task and activity views
 class TaskListCreateView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
@@ -514,6 +517,8 @@ def get_activities(request):
     return Response(response_data)
 
 
+
+# lead csv import and sample data views
 class LeadCSVImportView(APIView):
     def post(self, request):
         csv_file = request.FILES.get("file")
@@ -550,7 +555,6 @@ class LeadCSVImportView(APIView):
                     for row in reader
                 )
             elif extension == "xlsx":
-                from openpyxl import load_workbook
 
                 workbook = load_workbook(csv_file, read_only=True, data_only=True)
                 sheet = workbook.active
@@ -567,7 +571,6 @@ class LeadCSVImportView(APIView):
                 )
             else:
                 import xlrd
-
                 workbook = xlrd.open_workbook(file_contents=csv_file.read())
                 sheet = workbook.sheet_by_index(0)
                 headers = [str(value or "").strip().lower() for value in sheet.row_values(0)]
@@ -1735,6 +1738,37 @@ class InboundReplyDetailView(APIView):
         return Response(InboundReplySerializer(reply).data, status=status.HTTP_200_OK)
 
 
+class EmailSignatureViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
+    queryset = EmailSignature.objects.all()
+    serializer_class = EmailSignatureSerializer
+
+    def perform_create(self, serializer):
+        tenant_id = self.request.user.tenant_id
+        if not EmailSignature.objects.filter(tenant_id=tenant_id).exists():
+            serializer.validated_data["is_default"] = True
+        if serializer.validated_data.get("is_default"):
+            EmailSignature.objects.filter(tenant_id=tenant_id, is_default=True).update(is_default=False)
+        serializer.save(tenant_id=tenant_id)
+
+    def perform_update(self, serializer):
+        tenant_id = self.request.user.tenant_id
+        if serializer.validated_data.get("is_default"):
+            EmailSignature.objects.filter(tenant_id=tenant_id, is_default=True).exclude(pk=serializer.instance.pk).update(is_default=False)
+        elif not EmailSignature.objects.filter(tenant_id=tenant_id, is_default=True).exclude(pk=serializer.instance.pk).exists():
+            serializer.validated_data["is_default"] = True
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        tenant_id = instance.tenant_id
+        was_default = instance.is_default
+        super().perform_destroy(instance)
+        if was_default:
+            replacement = EmailSignature.objects.filter(tenant_id=tenant_id).order_by("id").first()
+            if replacement:
+                replacement.is_default = True
+                replacement.save(update_fields=["is_default"])
+
+
 class EmailTemplateViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
     queryset = MessageTemplate.objects.all()
     serializer_class = MessageTemplateSerializer
@@ -2142,7 +2176,7 @@ class BatchViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
         return Response(response_data, status=status.HTTP_200_OK)
 
 
-# webhook
+# mailgun webhook endpoint for email campaign events
 @csrf_exempt
 def mailgun_webhook(request):
     if request.method != "POST":
@@ -2394,6 +2428,8 @@ def mailgun_webhook(request):
             status=500,
         )
 
+
+# Unsubscribe endpoint for email campaigns
 @csrf_exempt
 def campaign_unsubscribe(request, token):
     if request.method not in ("GET", "POST"):
@@ -2470,6 +2506,10 @@ def campaign_unsubscribe(request, token):
         "campaigns/unsubscribe.html",
         page_context,
     )
+    
+    
+
+# validate Mailgun webhook signature 
 
 def _is_valid_mailgun_signature(signature_data):
     signing_keys = [
@@ -2504,6 +2544,9 @@ def _is_valid_mailgun_signature(signature_data):
         )
         for key in signing_keys
     )
+    
+    
+# Webhook endpoint for Mailgun events
 @csrf_exempt
 def mailgun_webhook(request):
     if request.method != "POST":
@@ -2755,6 +2798,8 @@ def mailgun_webhook(request):
             status=500,
         )
 
+
+# webhook for inbound email replies
 @csrf_exempt
 def mailgun_inbound_webhook(request):
     if request.method != "POST":

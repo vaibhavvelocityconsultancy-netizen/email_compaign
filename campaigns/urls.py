@@ -14,6 +14,7 @@ from .views import (
     EmailLogListView,
     EmailSequenceStepViewSet,
     EmailSequenceViewSet,
+    EmailSignatureViewSet,
     EmailTemplateViewSet,
     LeadCSVImportView,
     LeadCategoryListCreateView,
@@ -55,11 +56,13 @@ router.register("countries", CountryViewSet, basename="country")
 router.register("states", StateViewSet, basename="state")
 router.register("cities", CityViewSet, basename="city")
 router.register("email-templates", EmailTemplateViewSet, basename="email-template")
+router.register("email-signatures", EmailSignatureViewSet, basename="email-signature")
 router.register("email-sequences", EmailSequenceViewSet, basename="email-sequence")
 router.register("sequence-steps", EmailSequenceStepViewSet, basename="sequence-step")
 router.register("batches", BatchViewSet, basename="batch")
 
 urlpatterns = [
+  # companies master
     path("companies/", CompanyListView.as_view(), name="company-list"),
     path("companies/<int:pk>/", CompanyDetailView.as_view(), name="company-detail"),
     path(
@@ -72,6 +75,7 @@ urlpatterns = [
         CompanyContactDetailView.as_view(),
         name="company-contact-detail",
     ),
+    # leads 
     path(
         "lead-options/",
         LeadOptionsView.as_view(),
@@ -107,6 +111,7 @@ urlpatterns = [
         lead_convert_to_opportunity,
         name="lead-convert-to-opportunity",
     ),
+    # opportunities and quotations
     path(
         "opportunities/",
         OpportunityListCreateView.as_view(),
@@ -173,11 +178,15 @@ urlpatterns = [
         name="sales-order-detail",
     ),
     path("order-dashboard/", get_order_dashboard, name="order-dashboard"),
+    
+    # tasks and activities
     path("tasks/", TaskListCreateView.as_view(), name="task-list-create"),
     path("tasks/dashboard/", get_task_dashboard, name="task-dashboard"),
     path("tasks/activities/", get_activities, name="task-activities"),
     path("tasks/<int:pk>/", TaskDetailView.as_view(), name="task-detail"),
     path("task-options/", TaskOptionsView.as_view(), name="task-options"),
+    
+    # email campaign and logs
     path(
         "email-logs/",
         EmailLogListView.as_view(),
@@ -203,16 +212,21 @@ urlpatterns = [
         InboundReplyDetailView.as_view(),
         name="inbound-reply-detail",
     ),
+    
+    # unsubscribe and webhooks
       path(
           "email/unsubscribe/<str:token>/",
           campaign_unsubscribe,
           name="campaign-unsubscribe",
       ),
+      # webhook for mailgun to receive events like delivered, opened, clicked, etc.
       path(
           "webhooks/mailgun/",
         mailgun_webhook,
         name="mailgun-webhook"
     ),
+      
+      # inbound webhook for mailgun to receive incoming emails
       path(
         "webhooks/mailgun/inbound/",
         mailgun_inbound_webhook,

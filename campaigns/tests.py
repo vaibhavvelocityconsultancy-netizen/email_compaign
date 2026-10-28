@@ -22,10 +22,7 @@ from .models import (
     Company,
     CompanyContact,
     Country,
-<<<<<<< HEAD
     EmailCampaignSettings,
-=======
->>>>>>> 612c1c9aa8f3fdd9f0332a8f1776fd6ed878a789
     Lead,
     MessageTemplate,
     Opportunity,
@@ -398,11 +395,7 @@ class CampaignSendNowApiTests(TestCase):
 		DEFAULT_FROM_EMAIL="CRM <sender@example.com>",
 	)
 	@patch("campaigns.management.commands.process_email_campaign.save_to_sent")
-<<<<<<< HEAD
-	def test_force_sends_next_step_using_global_reply_to(self, _save_to_sent):
-=======
 	def test_force_sends_next_step_using_campaign_reply_to(self, _save_to_sent):
->>>>>>> 612c1c9aa8f3fdd9f0332a8f1776fd6ed878a789
 		first_template = MessageTemplate.objects.create(
 			name="First step",
 			subject="First",
@@ -427,12 +420,6 @@ class CampaignSendNowApiTests(TestCase):
 		self.batch_lead.current_step = 1
 		self.batch_lead.last_email_sent_at = timezone.now()
 		self.batch_lead.save(update_fields=["current_step", "last_email_sent_at"])
-<<<<<<< HEAD
-		EmailCampaignSettings.objects.create(
-			reply_to_email="global-replies@example.com"
-		)
-=======
->>>>>>> 612c1c9aa8f3fdd9f0332a8f1776fd6ed878a789
 
 		with self.settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend"):
 			call_command(
@@ -446,20 +433,12 @@ class CampaignSendNowApiTests(TestCase):
 		from django.core import mail
 
 		self.assertEqual(len(mail.outbox), 1)
-<<<<<<< HEAD
-		self.assertEqual(
-			mail.outbox[0].reply_to,
-			["global-replies@example.com"],
-		)
-=======
 		self.assertEqual(mail.outbox[0].reply_to, ["replies@example.com"])
->>>>>>> 612c1c9aa8f3fdd9f0332a8f1776fd6ed878a789
 		self.batch_lead.refresh_from_db()
 		self.assertEqual(self.batch_lead.current_step, 2)
 		self.assertTrue(self.batch_lead.completed)
 
 
-<<<<<<< HEAD
 class EmailCampaignSettingsApiTests(TestCase):
 	def setUp(self):
 		user = get_user_model().objects.create_user(
@@ -494,8 +473,6 @@ class EmailCampaignSettingsApiTests(TestCase):
 		self.assertEqual(response.status_code, 400)
 
 
-=======
->>>>>>> 612c1c9aa8f3fdd9f0332a8f1776fd6ed878a789
 class FinalOfferGenerationTests(TestCase):
     def test_generate_final_offer_creates_pdf_and_updates_quotation(self):
         user = get_user_model().objects.create_user(

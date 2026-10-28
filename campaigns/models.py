@@ -272,6 +272,28 @@ class Lead(TenantOwnedModel):
         return self.name or f"Enquiry #{self.sr_no}"
 
 
+class EmailSignature(TenantOwnedModel):
+    name = models.CharField(max_length=255)
+    text = models.TextField(blank=True)
+    logo = models.ImageField(upload_to="email_signature_logos/", null=True, blank=True)
+    is_default = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-is_default", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant"],
+                condition=models.Q(is_default=True),
+                name="unique_default_email_signature_per_tenant",
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
+
 class MessageTemplate(TenantOwnedModel):
     channel = models.CharField(
         max_length=20, choices=Channel.choices, default=Channel.EMAIL
@@ -287,6 +309,10 @@ class MessageTemplate(TenantOwnedModel):
     subject = models.CharField(max_length=500, blank=True)
     body = models.TextField()
     signature = models.TextField(blank=True)
+    signature_profile = models.ForeignKey(
+        EmailSignature, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="templates",
+    )
     logo = models.ImageField(upload_to="email_logos/", null=True, blank=True)
     attachment = models.FileField(upload_to="email_attachments/", null=True, blank=True)
     wa_template_name = models.CharField(max_length=255, blank=True)

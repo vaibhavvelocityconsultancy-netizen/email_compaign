@@ -67,6 +67,53 @@ class TenantMailgunSettingsListView(APIView):
         ])
 
 
+class TenantAdminListView(APIView):
+    permission_classes = [IsSuperUser]
+
+    def get(self, request):
+        tenants = Tenant.objects.select_related("mailgun_settings").prefetch_related("users").order_by("name", "id")
+        return Response([
+            {
+                "id": tenant.id,
+                "name": tenant.name,
+                "created_at": tenant.created_at,
+                "users_count": tenant.users.count(),
+                "mailgun_configured": bool(
+                    hasattr(tenant, "mailgun_settings")
+                    and tenant.mailgun_settings.encrypted_api_key
+                    and tenant.mailgun_settings.encrypted_webhook_signing_key
+                    and tenant.mailgun_settings.sender_domain
+                ),
+                "has_api_key": bool(
+                    hasattr(tenant, "mailgun_settings")
+                    and tenant.mailgun_settings.encrypted_api_key
+                ),
+                "has_webhook_signing_key": bool(
+                    hasattr(tenant, "mailgun_settings")
+                    and tenant.mailgun_settings.encrypted_webhook_signing_key
+                ),
+                "sender_domain": getattr(
+                    getattr(tenant, "mailgun_settings", None), "sender_domain", ""
+                ),
+            }
+            for tenant in tenants
+        ])
+
+
+class TenantAdminDetailView(APIView):
+    permission_classes = [IsSuperUser]
+
+    def delete(self, request, tenant_id):
+        tenant = get_object_or_404(Tenant, pk=tenant_id)
+        if tenant.users.exists():
+            return Response(
+                {"detail": "Cannot delete a tenant that has users. Remove its users first."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        tenant.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class OwnTenantMailgunSettingsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 

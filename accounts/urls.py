@@ -13,6 +13,8 @@ from .views import (
     RegisterView,
     RolePermissionViewSet,
     RoleViewSet,
+    TenantAdminDetailView,
+    TenantAdminListView,
     TenantMailgunSettingsDetailView,
     TenantMailgunSettingsListView,
     UserViewSet,
@@ -43,6 +45,8 @@ urlpatterns = [
         TenantMailgunSettingsDetailView.as_view(),
         name="mailgun-settings-detail",
     ),
+    path("tenants/", TenantAdminListView.as_view(), name="tenant-admin-list"),
+    path("tenants/<int:tenant_id>/", TenantAdminDetailView.as_view(), name="tenant-admin-detail"),
     path("google/authorize/", GoogleAuthorizationView.as_view(), name="google-authorize"),
     path("google/callback/", GoogleCallbackView.as_view(), name="google-callback"),
 ] + router.urls
