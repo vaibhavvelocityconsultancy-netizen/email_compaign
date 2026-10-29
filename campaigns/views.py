@@ -1699,7 +1699,7 @@ class UnsubscribePageSettingsView(APIView):
 class InboundReplyListView(APIView):
     def get(self, request):
         replies = InboundReply.objects.filter(
-            batch_lead__batch__tenant_id=request.user.tenant_id
+            tenant_id=request.user.tenant_id
         ).select_related(
             "batch_lead__lead", "batch_lead__batch"
         ).all()
@@ -1740,6 +1740,11 @@ class InboundReplyDetailView(APIView):
         from googleapiclient.errors import HttpError
 
         reply = self._get_reply(request, pk)
+        if reply.batch_lead_id is None:
+            return Response(
+                {"detail": "This message is not matched to a campaign lead."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         body = str(request.data.get("body", "")).strip()
         subject = str(request.data.get("subject", "")).strip()
         if not body:
@@ -1789,7 +1794,7 @@ class InboundReplyDetailView(APIView):
     def _get_reply(request, pk):
         return get_object_or_404(
             InboundReply.objects.filter(
-                batch_lead__batch__tenant_id=request.user.tenant_id
+                tenant_id=request.user.tenant_id
             ).select_related("batch_lead__lead", "batch_lead__batch"),
             pk=pk,
         )

@@ -883,6 +883,7 @@ class InboundReplySerializer(TenantScopedModelSerializer):
             "sender_email",
             "recipient_email",
             "subject",
+            "body_plain",
             "received_at",
             "lead",
             "campaign",
@@ -890,7 +891,7 @@ class InboundReplySerializer(TenantScopedModelSerializer):
         read_only_fields = fields
 
     def get_status(self, reply):
-        return MessageLog.Status.REPLIED
+        return MessageLog.Status.REPLIED if reply.batch_lead_id else "unmatched"
 
     def get_lead(self, reply):
         if reply.batch_lead_id is None:

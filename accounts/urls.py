@@ -6,6 +6,9 @@ from .views import (
     GoogleAuthorizationView,
     GoogleCallbackView,
     GmailConnectionView,
+    GmailReplySyncView,
+    IonosMailboxSyncView,
+    IonosMailboxView,
     LoginView,
     LogoutView,
     ModuleViewSet,
@@ -57,4 +60,7 @@ urlpatterns = [
     path("google/authorize/", GoogleAuthorizationView.as_view(), name="google-authorize"),
     path("google/callback/", GoogleCallbackView.as_view(), name="google-callback"),
     path("gmail-connection/", GmailConnectionView.as_view(), name="gmail-connection"),
+    path("gmail-connection/sync/", GmailReplySyncView.as_view(), name="gmail-reply-sync"),
+    path("ionos-mailbox/", IonosMailboxView.as_view(), name="ionos-mailbox"),
+    path("ionos-mailbox/sync/", IonosMailboxSyncView.as_view(), name="ionos-mailbox-sync"),
 ] + router.urls

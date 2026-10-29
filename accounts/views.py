@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 
 from django.contrib.auth import get_user_model
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.shortcuts import get_object_or_404
 from django.shortcuts import redirect
 from django.db import models, transaction
@@ -16,7 +17,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from campaigns.models import GmailMailbox
+from campaigns.models import GmailMailbox, IonosMailbox
+from campaigns.ionos_sync import (
+    IonosAuthenticationError,
+    IonosMailboxError,
+    validate_ionos_credentials,
+    sync_ionos_replies,
+)
+from .mailgun_secrets import encrypt_mailgun_secret
 
 from .gmail_oauth import (
     GmailOAuthConfigurationError,
@@ -29,6 +37,7 @@ from .models import Module, Role, RolePermission, Tenant, TenantMailgunSettings
 from .serializers import (
     LoginSerializer,
     LogoutSerializer,
+    IonosMailboxConnectSerializer,
     ModuleSerializer,
     RefreshSerializer,
     RegisterSerializer,
@@ -40,6 +49,17 @@ from .serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _gmail_tenant_id(request):
+    if request.user.is_superuser:
+        requested_tenant_id = request.query_params.get(
+            "tenant_id", request.user.tenant_id
+        )
+        return Tenant.objects.filter(pk=requested_tenant_id).values_list(
+            "pk", flat=True
+        ).first()
+    return request.user.tenant_id
 
 
 class IsSuperUser(permissions.BasePermission):
@@ -483,14 +503,7 @@ class GmailConnectionView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def _tenant_id(self, request):
-        if request.user.is_superuser:
-            requested_tenant_id = request.query_params.get(
-                "tenant_id", request.user.tenant_id
-            )
-            return Tenant.objects.filter(pk=requested_tenant_id).values_list(
-                "pk", flat=True
-            ).first()
-        return request.user.tenant_id
+        return _gmail_tenant_id(request)
 
     def get(self, request):
         tenant_id = self._tenant_id(request)
@@ -537,3 +550,230 @@ class GmailConnectionView(APIView):
                 ]
             )
         return Response({"connected": False, "email": ""})
+
+
+class GmailReplySyncView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        tenant_id = _gmail_tenant_id(request)
+        if tenant_id is None:
+            return Response(
+                {"detail": "Select a valid tenant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        mailbox = GmailMailbox.objects.filter(
+            tenant_id=tenant_id
+        ).exclude(encrypted_credentials="").first()
+        if mailbox is None:
+            return Response(
+                {"detail": "Connect a Gmail mailbox before syncing replies."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from campaigns.gmail_sync import sync_gmail_replies
+
+        try:
+            processed_count = sync_gmail_replies(mailbox.pk)
+        except GmailOAuthConfigurationError as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except GmailOAuthError as error:
+            mailbox.refresh_from_db(fields=["encrypted_credentials"])
+            if not mailbox.encrypted_credentials:
+                return Response(
+                    {"detail": "Gmail authorization expired or was revoked. Reconnect Gmail."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            logger.error(
+                "Manual Gmail reply sync failed for mailbox_id=%s error_type=%s",
+                mailbox.pk,
+                type(error).__name__,
+            )
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        except Exception as error:
+            logger.error(
+                "Manual Gmail reply sync failed for mailbox_id=%s error_type=%s",
+                mailbox.pk,
+                type(error).__name__,
+            )
+            return Response(
+                {"detail": "Gmail reply synchronization failed. Please try again."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        mailbox.refresh_from_db(fields=["last_sync_at"])
+        return Response(
+            {
+                "processed_count": processed_count,
+                "last_sync_at": mailbox.last_sync_at,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class IonosMailboxView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _tenant_id(self, request):
+        if request.user.is_superuser:
+            requested_tenant_id = request.query_params.get(
+                "tenant_id", request.user.tenant_id
+            )
+            return Tenant.objects.filter(pk=requested_tenant_id).values_list(
+                "pk", flat=True
+            ).first()
+        return request.user.tenant_id
+
+    def get(self, request):
+        tenant_id = self._tenant_id(request)
+        if tenant_id is None:
+            return Response(
+                {"detail": "Select a valid tenant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        mailbox = IonosMailbox.objects.filter(tenant_id=tenant_id).first()
+        return Response(
+            {
+                "connected": bool(mailbox and mailbox.is_connected),
+                "email": mailbox.email if mailbox and mailbox.is_connected else "",
+                "last_sync_at": mailbox.last_sync_at if mailbox else None,
+                "last_error": mailbox.last_error if mailbox else "",
+            }
+        )
+
+    def post(self, request):
+        tenant_id = self._tenant_id(request)
+        if tenant_id is None:
+            return Response(
+                {"detail": "Select a valid tenant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer = IonosMailboxConnectSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email_address = serializer.validated_data["email"]
+        password = serializer.validated_data["password"]
+        try:
+            uid_validity, uid_next = validate_ionos_credentials(
+                email_address, password
+            )
+            encrypted_password = encrypt_mailgun_secret(password)
+        except IonosAuthenticationError as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except IonosMailboxError as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        except ImproperlyConfigured as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        mailbox, _ = IonosMailbox.objects.get_or_create(tenant_id=tenant_id)
+        mailbox.email = email_address
+        mailbox.encrypted_password = encrypted_password
+        mailbox.is_connected = True
+        mailbox.uid_validity = uid_validity
+        mailbox.last_uid = max((uid_next or 1) - 1, 0)
+        mailbox.last_sync_at = None
+        mailbox.last_error = ""
+        mailbox.save(
+            update_fields=[
+                "email",
+                "encrypted_password",
+                "is_connected",
+                "uid_validity",
+                "last_uid",
+                "last_sync_at",
+                "last_error",
+                "updated_at",
+            ]
+        )
+        return Response(
+            {
+                "connected": True,
+                "email": mailbox.email,
+                "last_sync_at": mailbox.last_sync_at,
+                "last_error": "",
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def delete(self, request):
+        tenant_id = self._tenant_id(request)
+        if tenant_id is None:
+            return Response(
+                {"detail": "Select a valid tenant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        mailbox = IonosMailbox.objects.filter(tenant_id=tenant_id).first()
+        if mailbox:
+            mailbox.email = ""
+            mailbox.encrypted_password = ""
+            mailbox.is_connected = False
+            mailbox.uid_validity = ""
+            mailbox.last_uid = 0
+            mailbox.last_sync_at = None
+            mailbox.last_error = ""
+            mailbox.save(
+                update_fields=[
+                    "email",
+                    "encrypted_password",
+                    "is_connected",
+                    "uid_validity",
+                    "last_uid",
+                    "last_sync_at",
+                    "last_error",
+                    "updated_at",
+                ]
+            )
+        return Response({"connected": False, "email": ""})
+
+
+class IonosMailboxSyncView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        tenant_id = request.user.tenant_id
+        if request.user.is_superuser:
+            tenant_id = Tenant.objects.filter(
+                pk=request.query_params.get("tenant_id", tenant_id)
+            ).values_list("pk", flat=True).first()
+        if tenant_id is None:
+            return Response(
+                {"detail": "Select a valid tenant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        mailbox = IonosMailbox.objects.filter(
+            tenant_id=tenant_id,
+            is_connected=True,
+        ).first()
+        if mailbox is None:
+            return Response(
+                {"detail": "Connect an IONOS mailbox before synchronizing replies."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            processed_count = sync_ionos_replies(mailbox.pk)
+        except IonosMailboxError as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        mailbox.refresh_from_db(fields=["last_sync_at", "last_error"])
+        return Response(
+            {
+                "processed_count": processed_count,
+                "last_sync_at": mailbox.last_sync_at,
+            }
+        )

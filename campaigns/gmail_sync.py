@@ -1,4 +1,5 @@
 import re
+import logging
 from datetime import datetime, timezone as datetime_timezone
 from email.utils import parseaddr
 
@@ -15,6 +16,9 @@ from .models import (
     InboundReply,
     MessageLog,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 METADATA_HEADERS = ("From", "To", "Date", "Message-ID", "In-Reply-To", "References")
@@ -214,7 +218,7 @@ def _process_message_data(mailbox, message, gmail_message_id):
     batch_lead = matched_log.batch_lead
     dedupe_id = headers.get("message-id", "").strip() or f"gmail:{gmail_message_id}"
     with transaction.atomic():
-        reply, _ = InboundReply.objects.get_or_create(
+        reply, created = InboundReply.objects.get_or_create(
             message_id_hash=InboundReply.message_id_digest(dedupe_id),
             defaults={
                 "batch_lead": batch_lead,
@@ -240,37 +244,69 @@ def _process_message_data(mailbox, message, gmail_message_id):
         MessageLog.objects.filter(pk=matched_log.pk).update(
             status=MessageLog.Status.REPLIED
         )
-    return True
+    return created
 
 
 def sync_gmail_replies(mailbox_id=None):
     if mailbox_id is None:
         mailbox_ids = list(
-            GmailMailbox.objects.exclude(encrypted_credentials="").values_list(
+            GmailMailbox.objects.filter(tenant__isnull=False)
+            .exclude(encrypted_credentials="")
+            .values_list(
                 "pk",
                 flat=True,
             )
         )
         if not mailbox_ids:
             raise GmailOAuthError("Gmail is not connected. Authorize a mailbox first.")
-        return sum(sync_gmail_replies(identifier) for identifier in mailbox_ids)
+        processed_count = 0
+        failed_mailbox_ids = []
+        for identifier in mailbox_ids:
+            try:
+                processed_count += sync_gmail_replies(identifier)
+            except Exception as error:
+                failed_mailbox_ids.append(identifier)
+                logger.warning(
+                    "Gmail reply sync failed for mailbox_id=%s error_type=%s",
+                    identifier,
+                    type(error).__name__,
+                )
+        if failed_mailbox_ids:
+            raise GmailOAuthError(
+                f"Processed {processed_count} new message(s); sync failed for "
+                f"{len(failed_mailbox_ids)} mailbox(es). Check connection status and logs."
+            )
+        return processed_count
 
+    revoked_error = None
     with transaction.atomic():
         mailbox = GmailMailbox.objects.select_for_update().filter(pk=mailbox_id).first()
         if mailbox is None or not mailbox.encrypted_credentials:
             raise GmailOAuthError("Gmail is not connected. Authorize a mailbox first.")
-        service = get_gmail_service(mailbox)
-        message_ids, latest_history_id = _history_messages(service, mailbox.history_id)
-        if message_ids is None:
-            latest_history_id, processed_count = _recover_expired_history(
-                service, mailbox
+        try:
+            service = get_gmail_service(mailbox)
+            message_ids, latest_history_id = _history_messages(
+                service, mailbox.history_id
             )
-        else:
-            processed_count = sum(
-                _process_message(service, mailbox, message_id)
-                for message_id in message_ids
-            )
-        mailbox.history_id = latest_history_id
-        mailbox.last_sync_at = timezone.now()
-        mailbox.save(update_fields=["history_id", "last_sync_at", "updated_at"])
-        return processed_count
+            if message_ids is None:
+                latest_history_id, processed_count = _recover_expired_history(
+                    service, mailbox
+                )
+            else:
+                processed_count = sum(
+                    _process_message(service, mailbox, message_id)
+                    for message_id in message_ids
+                )
+            mailbox.history_id = latest_history_id
+            mailbox.last_sync_at = timezone.now()
+            mailbox.save(update_fields=["history_id", "last_sync_at", "updated_at"])
+        except GmailOAuthError as error:
+            # get_gmail_service clears revoked credentials. Commit that state before
+            # surfacing the error so the mailbox does not remain falsely connected.
+            if mailbox.encrypted_credentials:
+                raise
+            revoked_error = error
+
+    if revoked_error:
+        raise revoked_error
+    return processed_count

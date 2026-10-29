@@ -26,6 +26,7 @@ from campaigns.models import (
     Channel,
     EmailCampaignSettings,
     EmailLog,
+    IonosMailbox,
     MessageTemplate,
 )
 from campaigns.unsubscribe import (
@@ -685,17 +686,28 @@ class Command(BaseCommand):
                         )
                     )
 
-                    reply_to_email = (
-                        mailgun_settings.reply_to_email
-                        if mailgun_settings is not None
-                        else ""
-                    )
+                    reply_to_email = batch.reply_to_email.strip()
+                    if not reply_to_email:
+                        reply_to_email = (
+                            mailgun_settings.reply_to_email
+                            if mailgun_settings is not None
+                            else ""
+                        )
                     if not reply_to_email:
                         reply_to_email = (
                             EmailCampaignSettings.objects.filter(
                                 tenant_id=batch.tenant_id
                             )
                             .values_list("reply_to_email", flat=True)
+                            .first()
+                        )
+                    if not reply_to_email:
+                        reply_to_email = (
+                            IonosMailbox.objects.filter(
+                                tenant_id=batch.tenant_id,
+                                is_connected=True,
+                            )
+                            .values_list("email", flat=True)
                             .first()
                         )
                     reply_to_email = (

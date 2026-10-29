@@ -16,7 +16,7 @@ def _fernet():
     key = get_encryption_key()
     if not key:
         raise ImproperlyConfigured(
-            "GMAIL_TOKEN_ENCRYPTION_KEY must be configured to store Mailgun secrets."
+            "GMAIL_TOKEN_ENCRYPTION_KEY must be configured to encrypt stored credentials."
         )
     try:
         return Fernet(key.encode("ascii"))

@@ -567,6 +567,7 @@ class InboundReply(TenantOwnedModel):
     message_id_hash = models.CharField(
         max_length=64, null=True, blank=True, editable=False
     )
+    external_source_key = models.CharField(max_length=255, null=True, blank=True)
     received_at = models.DateTimeField(default=timezone.now, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -577,6 +578,11 @@ class InboundReply(TenantOwnedModel):
                 fields=["tenant", "message_id_hash"],
                 condition=models.Q(message_id_hash__isnull=False),
                 name="unique_reply_message_per_tenant",
+            ),
+            models.UniqueConstraint(
+                fields=["tenant", "external_source_key"],
+                condition=models.Q(external_source_key__isnull=False),
+                name="unique_reply_source_key_per_tenant",
             )
         ]
 
@@ -615,6 +621,29 @@ class GmailMailbox(TenantOwnedModel):
 
     def __str__(self):
         return self.email or "Connected Gmail mailbox"
+
+
+class IonosMailbox(TenantOwnedModel):
+    email = models.EmailField(blank=True)
+    encrypted_password = models.TextField(blank=True)
+    is_connected = models.BooleanField(default=False)
+    uid_validity = models.CharField(max_length=64, blank=True)
+    last_uid = models.PositiveBigIntegerField(default=0)
+    last_sync_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant"],
+                name="unique_ionos_mailbox_per_tenant",
+            )
+        ]
+
+    def __str__(self):
+        return self.email or "Connected IONOS mailbox"
 
 
 EmailLog = MessageLog

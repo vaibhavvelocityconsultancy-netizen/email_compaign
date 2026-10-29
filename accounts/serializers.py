@@ -33,6 +33,19 @@ class UserInfoSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class IonosMailboxConnectSerializer(serializers.Serializer):
+    email = serializers.EmailField(max_length=254)
+    password = serializers.CharField(
+        write_only=True,
+        trim_whitespace=False,
+        allow_blank=False,
+        max_length=1024,
+    )
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+
 class TenantMailgunSettingsSerializer(serializers.ModelSerializer):
     tenant_name = serializers.CharField(source="tenant.name", read_only=True)
     has_api_key = serializers.SerializerMethodField()

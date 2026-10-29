@@ -196,8 +196,14 @@ class InboundReplyApiTests(TestCase):
             password="not-a-real-password",
         )
         self.client = APIClient()
-        self.batch = Batch.objects.create(name="Filtered campaign")
-        self.lead = Lead.objects.create(name="Taylor Example", email="taylor@example.com")
+        self.batch = Batch.objects.create(
+            name="Filtered campaign", tenant=self.user.tenant
+        )
+        self.lead = Lead.objects.create(
+            name="Taylor Example",
+            email="taylor@example.com",
+            tenant=self.user.tenant,
+        )
         self.batch_lead = BatchLead.objects.create(
             batch=self.batch,
             lead=self.lead,
@@ -210,6 +216,7 @@ class InboundReplyApiTests(TestCase):
             subject="A reply",
             body_plain="Reply body",
             message_id="<api-reply@example.com>",
+            tenant=self.user.tenant,
         )
 
     def test_list_requires_authentication(self):
@@ -226,6 +233,7 @@ class InboundReplyApiTests(TestCase):
             body_plain="An older message",
             message_id="<older-reply@example.com>",
             received_at=timezone.now() - timedelta(days=1),
+            tenant=self.user.tenant,
         )
 
         list_response = self.client.get(reverse("inbound-reply-list"))
@@ -242,9 +250,9 @@ class InboundReplyApiTests(TestCase):
         self.assertEqual(list_response.data[0]["campaign"]["id"], self.batch.pk)
         self.assertEqual(list_response.data[0]["status"], MessageLog.Status.REPLIED)
         self.assertEqual(detail_response.status_code, 200)
-        self.assertNotIn("body_plain", detail_response.data)
+        self.assertEqual(detail_response.data["body_plain"], "Reply body")
         self.assertNotIn("body_html", detail_response.data)
-        self.assertNotIn("subject", detail_response.data)
+        self.assertEqual(detail_response.data["subject"], "A reply")
 
     def test_list_filters_by_lead_and_batch(self):
         self.client.force_authenticate(user=self.user)

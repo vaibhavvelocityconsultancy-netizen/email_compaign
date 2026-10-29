@@ -23,6 +23,7 @@ from .models import (
     CompanyContact,
     Country,
     EmailCampaignSettings,
+    IonosMailbox,
     Lead,
     MessageTemplate,
     Opportunity,
@@ -1243,6 +1244,25 @@ class CampaignAutomaticProcessingTests(TestCase):
 		self.assertEqual(len(mail.outbox), 1)
 		self.assertEqual(mail.outbox[0].to, [self.lead.email])
 		self.assertEqual(batch_lead.current_step, 1)
+
+	@patch("campaigns.management.commands.process_email_campaign.save_to_sent")
+	def test_connected_ionos_mailbox_is_reply_to_fallback(self, _save_to_sent):
+		from django.core import mail
+
+		IonosMailbox.objects.create(
+			tenant=self.user.tenant,
+			email="tracked@example.com",
+			encrypted_password="encrypted-password",
+			is_connected=True,
+		)
+		self.sequence.tenant = self.user.tenant
+		self.sequence.save(update_fields=["tenant"])
+		with self.captureOnCommitCallbacks(execute=True):
+			response = self.create_campaign()
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(len(mail.outbox), 1)
+		self.assertEqual(mail.outbox[0].reply_to, ["tracked@example.com"])
 
 	@patch("campaigns.management.commands.process_email_campaign.save_to_sent")
 	def test_resume_sends_immediate_first_step(self, _save_to_sent):
