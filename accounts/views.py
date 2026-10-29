@@ -3,9 +3,12 @@ import hmac
 import logging
 import secrets
 from datetime import timedelta
+from urllib.parse import urlencode
 
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.shortcuts import get_object_or_404
+from django.shortcuts import redirect
 from django.db import models, transaction
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
@@ -340,9 +343,20 @@ class CurrentUserView(APIView):
 
 
 class GoogleAuthorizationView(APIView):
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        tenant_id = request.user.tenant_id
+        if request.user.is_superuser:
+            requested_tenant_id = request.query_params.get("tenant_id", tenant_id)
+            tenant_id = Tenant.objects.filter(pk=requested_tenant_id).values_list(
+                "pk", flat=True
+            ).first()
+            if tenant_id is None:
+                return Response(
+                    {"detail": "Select a valid tenant before connecting Gmail."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         try:
             state = secrets.token_urlsafe(32)
             authorization_url, code_verifier = create_gmail_authorization_url(state)
@@ -359,7 +373,7 @@ class GoogleAuthorizationView(APIView):
             )
 
         mailbox, _ = GmailMailbox.objects.get_or_create(
-            tenant_id=request.user.tenant_id
+            tenant_id=tenant_id
         )
         mailbox.oauth_state_hash = hashlib.sha256(
             state.encode("utf-8")
@@ -452,16 +466,74 @@ class GoogleCallbackView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         except GmailOAuthError as error:
-          logger.exception(
-              "Gmail OAuth callback failed: %s",
-              str(error),
-          )
-          return Response(
-              {"detail": "Google authorization could not be completed. Please check the server logs."},
-              status=status.HTTP_502_BAD_GATEWAY,
-          )
+            logger.exception("Gmail OAuth callback failed: %s", str(error))
+            return Response(
+                {"detail": "Google authorization could not be completed. Please check the server logs."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
-        return Response(
-            {"status": "connected", "mailbox": connected_mailbox.email},
-            status=status.HTTP_200_OK,
+        redirect_uri = settings.GMAIL_OAUTH_FRONTEND_REDIRECT_URI
+        separator = "&" if "?" in redirect_uri else "?"
+        return redirect(
+            f"{redirect_uri}{separator}{urlencode({'gmail': 'connected'})}"
         )
+
+
+class GmailConnectionView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _tenant_id(self, request):
+        if request.user.is_superuser:
+            requested_tenant_id = request.query_params.get(
+                "tenant_id", request.user.tenant_id
+            )
+            return Tenant.objects.filter(pk=requested_tenant_id).values_list(
+                "pk", flat=True
+            ).first()
+        return request.user.tenant_id
+
+    def get(self, request):
+        tenant_id = self._tenant_id(request)
+        if tenant_id is None:
+            return Response(
+                {"detail": "Select a valid tenant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        mailbox = GmailMailbox.objects.filter(tenant_id=tenant_id).first()
+        return Response(
+            {
+                "connected": bool(mailbox and mailbox.encrypted_credentials),
+                "email": mailbox.email if mailbox and mailbox.encrypted_credentials else "",
+                "last_sync_at": mailbox.last_sync_at if mailbox else None,
+            }
+        )
+
+    def delete(self, request):
+        tenant_id = self._tenant_id(request)
+        if tenant_id is None:
+            return Response(
+                {"detail": "Select a valid tenant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        mailbox = GmailMailbox.objects.filter(tenant_id=tenant_id).first()
+        if mailbox:
+            mailbox.email = ""
+            mailbox.encrypted_credentials = ""
+            mailbox.history_id = ""
+            mailbox.last_sync_at = None
+            mailbox.oauth_state_hash = ""
+            mailbox.oauth_state_created_at = None
+            mailbox.oauth_code_verifier = ""
+            mailbox.save(
+                update_fields=[
+                    "email",
+                    "encrypted_credentials",
+                    "history_id",
+                    "last_sync_at",
+                    "oauth_state_hash",
+                    "oauth_state_created_at",
+                    "oauth_code_verifier",
+                    "updated_at",
+                ]
+            )
+        return Response({"connected": False, "email": ""})

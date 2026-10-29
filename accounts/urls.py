@@ -5,6 +5,7 @@ from .views import (
     CurrentUserView,
     GoogleAuthorizationView,
     GoogleCallbackView,
+    GmailConnectionView,
     LoginView,
     LogoutView,
     ModuleViewSet,
@@ -55,4 +56,5 @@ urlpatterns = [
     path("system-logs/<int:log_id>/action/", SystemLogAdminActionView.as_view(), name="system-log-admin-action"),
     path("google/authorize/", GoogleAuthorizationView.as_view(), name="google-authorize"),
     path("google/callback/", GoogleCallbackView.as_view(), name="google-callback"),
+    path("gmail-connection/", GmailConnectionView.as_view(), name="gmail-connection"),
 ] + router.urls

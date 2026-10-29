@@ -83,7 +83,7 @@ def create_gmail_authorization_url(state):
     authorization_url, _ = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
-        prompt="consent",
+        prompt="select_account consent",
     )
 
     if not flow.code_verifier:

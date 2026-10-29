@@ -29,7 +29,7 @@ class GoogleOAuthViewTests(TestCase):
             is_staff=True,
         )
 
-    def test_authorization_requires_admin_authentication(self):
+    def test_authorization_requires_authentication_and_allows_tenant_users(self):
         response = self.client.get(reverse("accounts:google-authorize"))
 
         self.assertEqual(response.status_code, 401)
@@ -40,8 +40,8 @@ class GoogleOAuthViewTests(TestCase):
             password="test-password-value",
         )
         self.client.force_authenticate(user=regular_user)
-        forbidden_response = self.client.get(reverse("accounts:google-authorize"))
-        self.assertEqual(forbidden_response.status_code, 403)
+        tenant_response = self.client.get(reverse("accounts:google-authorize"))
+        self.assertEqual(tenant_response.status_code, 200)
     def test_authorization_url_requests_metadata_scope_only(self):
         authorization_url, encrypted_code_verifier = create_gmail_authorization_url(
             "oauth-state-value"
@@ -51,6 +51,7 @@ class GoogleOAuthViewTests(TestCase):
         self.assertEqual(query["scope"], [GMAIL_SCOPE])
         self.assertEqual(query["state"], ["oauth-state-value"])
         self.assertEqual(query["access_type"], ["offline"])
+        self.assertEqual(query["prompt"], ["select_account consent"])
         self.assertTrue(query["code_challenge"])
         self.assertEqual(query["code_challenge_method"], ["S256"])
         self.assertTrue(encrypted_code_verifier)
@@ -106,8 +107,8 @@ class GoogleOAuthViewTests(TestCase):
         )
 
         self.assertEqual(invalid_response.status_code, 400)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data, {"status": "connected", "mailbox": "replies@example.com"})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("gmail=connected", response["Location"])
         self.assertEqual(replay_response.status_code, 400)
         decrypt_verifier.assert_called_once_with("encrypted-code-verifier")
         mailbox = GmailMailbox.objects.get(pk=1)
@@ -117,6 +118,42 @@ class GoogleOAuthViewTests(TestCase):
             mailbox=mailbox,
         )
         self.assertEqual(mailbox.oauth_code_verifier, "")
+
+    def test_connection_status_and_disconnect_are_limited_to_current_tenant(self):
+        from accounts.views import GmailConnectionView
+
+        own = GmailMailbox.objects.create(
+            tenant=self.user.tenant,
+            email="own@example.com",
+            encrypted_credentials="encrypted-own",
+            history_id="100",
+        )
+        other_user = get_user_model().objects.create_user(
+            username="othergmailtenant",
+            email="othergmailtenant@example.com",
+            password="test-password-value",
+        )
+        other = GmailMailbox.objects.create(
+            tenant=other_user.tenant,
+            email="other@example.com",
+            encrypted_credentials="encrypted-other",
+            history_id="200",
+        )
+        self.client.force_authenticate(user=self.user)
+
+        status_response = self.client.get(
+            reverse("accounts:gmail-connection"),
+            {"tenant_id": other.tenant_id},
+        )
+        disconnect_response = self.client.delete(reverse("accounts:gmail-connection"))
+
+        self.assertEqual(status_response.data["email"], own.email)
+        self.assertTrue(status_response.data["connected"])
+        self.assertEqual(disconnect_response.status_code, 200)
+        own.refresh_from_db()
+        other.refresh_from_db()
+        self.assertEqual(own.encrypted_credentials, "")
+        self.assertEqual(other.encrypted_credentials, "encrypted-other")
 
     @patch("accounts.views.create_gmail_authorization_url")
     def test_expired_state_is_rejected(self, create_url):
