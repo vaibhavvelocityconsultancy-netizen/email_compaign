@@ -17,6 +17,7 @@ from .views import (
     EmailSignatureViewSet,
     EmailTemplateViewSet,
     LeadCSVImportView,
+    LeadBulkUpdateView,
     LeadCategoryListCreateView,
     LeadDetailView,
     LeadListView,
@@ -100,6 +101,11 @@ urlpatterns = [
         "leads/",
         LeadListView.as_view(),
         name="lead-list",
+    ),
+    path(
+        "leads/bulk-update/",
+        LeadBulkUpdateView.as_view(),
+        name="lead-bulk-update",
     ),
     path(
         "leads/<int:pk>/",

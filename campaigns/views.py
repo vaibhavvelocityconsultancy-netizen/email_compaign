@@ -10,6 +10,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.forms import models
 from django.shortcuts import get_object_or_404, render
 from django.db.models import Count, Q
+from django.db import transaction
 from django.views import View
 from rest_framework.response import Response
 from rest_framework import generics, viewsets, status
@@ -859,6 +860,60 @@ class LeadListView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save(tenant_id=request.user.tenant_id)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class LeadBulkUpdateView(APIView):
+    allowed_fields = {
+        "company_name",
+        "contact_name",
+        "status",
+        "source",
+        "enquiry_for",
+        "enquiry_date",
+        "followup_date",
+        "followup_remarks",
+        "category",
+    }
+
+    def post(self, request):
+        lead_ids = request.data.get("ids", [])
+        updates = request.data.get("updates", {})
+
+        if not isinstance(lead_ids, list) or not lead_ids:
+            return Response({"ids": ["Select at least one lead."]}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(updates, dict):
+            return Response({"updates": ["Must be an object."]}, status=status.HTTP_400_BAD_REQUEST)
+
+        updates = {
+            key: value
+            for key, value in updates.items()
+            if key in self.allowed_fields
+        }
+        if not updates:
+            return Response({"updates": ["Select at least one field to update."]}, status=status.HTTP_400_BAD_REQUEST)
+
+        leads = list(
+            Lead.objects.filter(
+                sr_no__in=lead_ids,
+                tenant_id=request.user.tenant_id,
+                is_active=True,
+            ).select_related("company", "contact", "category")
+        )
+        if len(leads) != len(set(map(int, lead_ids))):
+            return Response({"ids": ["One or more selected leads were not found."]}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            for lead in leads:
+                serializer = LeadSerializer(
+                    lead,
+                    data=updates,
+                    partial=True,
+                    context={"request": request},
+                )
+                serializer.is_valid(raise_exception=True)
+                serializer.save()
+
+        return Response({"updated": len(leads)}, status=status.HTTP_200_OK)
 
 
 class LeadDetailView(generics.RetrieveUpdateDestroyAPIView):
