@@ -642,7 +642,7 @@ class Command(BaseCommand):
 
                             body += (
                                 "<br><br>"
-                                "Best Regards,<br>"
+                                
                                 "<table>"
                                 "<tr>"
                                 '<td style="vertical-align:middle;'
@@ -661,7 +661,7 @@ class Command(BaseCommand):
 
                             body += (
                                 "<br><br>"
-                                "Best Regards,<br>"
+                               
                                 f"{signature}"
                             )
 

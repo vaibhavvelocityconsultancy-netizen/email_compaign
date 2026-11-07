@@ -4,6 +4,29 @@ from django.db import migrations, models
 import django.db.models.deletion
 
 
+def recreate_missing_campaign_tables(apps, schema_editor):
+    model_names = (
+        "Opportunity",
+        "OpportunityModule",
+        "Quotation",
+        "QuotationItem",
+        "SalesOrder",
+        "Task",
+        "TaskAttachment",
+    )
+    existing_tables = schema_editor.connection.introspection.table_names()
+
+    for model_name in model_names:
+        model = apps.get_model("campaigns", model_name)
+        if model._meta.db_table not in existing_tables:
+            schema_editor.create_model(model)
+            existing_tables.append(model._meta.db_table)
+            print(
+                f"WARNING: Recreated missing table {model._meta.db_table}. "
+                "Any previously stored rows must be restored from backup."
+            )
+
+
 def assign_existing_data_to_legacy_tenant(apps, schema_editor):
     Tenant = apps.get_model("accounts", "Tenant")
     tenant, _ = Tenant.objects.using(schema_editor.connection.alias).get_or_create(
@@ -33,7 +56,52 @@ def assign_existing_data_to_legacy_tenant(apps, schema_editor):
         ).update(tenant_id=tenant.pk)
 
 
+class AddFieldIfMissing(migrations.AddField):
+    def database_forwards(self, app_label, schema_editor, from_state, to_state):
+        model = to_state.apps.get_model(app_label, self.model_name)
+        field = model._meta.get_field(self.name)
+        table_name = model._meta.db_table
+        existing_tables = schema_editor.connection.introspection.table_names()
+        if table_name in existing_tables:
+            with schema_editor.connection.cursor() as cursor:
+                columns = {
+                    column.name
+                    for column in schema_editor.connection.introspection.get_table_description(
+                        cursor, table_name
+                    )
+                }
+            if field.column in columns:
+                return
+        super().database_forwards(app_label, schema_editor, from_state, to_state)
+
+
+class RemoveConstraintIfExists(migrations.RemoveConstraint):
+    def database_forwards(self, app_label, schema_editor, from_state, to_state):
+        model = from_state.apps.get_model(app_label, self.model_name)
+        with schema_editor.connection.cursor() as cursor:
+            constraints = schema_editor.connection.introspection.get_constraints(
+                cursor, model._meta.db_table
+            )
+        if self.name not in constraints:
+            return
+        super().database_forwards(app_label, schema_editor, from_state, to_state)
+
+
+class AddConstraintIfMissing(migrations.AddConstraint):
+    def database_forwards(self, app_label, schema_editor, from_state, to_state):
+        model = to_state.apps.get_model(app_label, self.model_name)
+        with schema_editor.connection.cursor() as cursor:
+            constraints = schema_editor.connection.introspection.get_constraints(
+                cursor, model._meta.db_table
+            )
+        if self.constraint.name in constraints:
+            return
+        super().database_forwards(app_label, schema_editor, from_state, to_state)
+
+
 class Migration(migrations.Migration):
+
+    atomic = False
 
     dependencies = [
         ('accounts', '0002_tenant_user_tenant'),
@@ -41,90 +109,94 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveConstraint(
+        migrations.RunPython(
+            recreate_missing_campaign_tables,
+            migrations.RunPython.noop,
+        ),
+        RemoveConstraintIfExists(
             model_name='city',
             name='unique_city_per_state',
         ),
-        migrations.RemoveConstraint(
+        RemoveConstraintIfExists(
             model_name='state',
             name='unique_state_per_country',
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name='batch',
             name='tenant',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='+', to='accounts.tenant'),
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name='city',
             name='tenant',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='+', to='accounts.tenant'),
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name='company',
             name='tenant',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='+', to='accounts.tenant'),
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name='country',
             name='tenant',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='+', to='accounts.tenant'),
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name='emailcampaignsettings',
             name='tenant',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='+', to='accounts.tenant'),
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name='emailsuppression',
             name='tenant',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='+', to='accounts.tenant'),
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name='gmailmailbox',
             name='tenant',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='+', to='accounts.tenant'),
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name='inboundreply',
             name='tenant',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='+', to='accounts.tenant'),
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name='lead',
             name='tenant',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='+', to='accounts.tenant'),
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name='messagetemplate',
             name='tenant',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='+', to='accounts.tenant'),
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name='opportunity',
             name='tenant',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='+', to='accounts.tenant'),
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name='quotation',
             name='tenant',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='+', to='accounts.tenant'),
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name='salesorder',
             name='tenant',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='+', to='accounts.tenant'),
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name='sequence',
             name='tenant',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='+', to='accounts.tenant'),
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name='state',
             name='tenant',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='+', to='accounts.tenant'),
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name='task',
             name='tenant',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='+', to='accounts.tenant'),
@@ -173,35 +245,35 @@ class Migration(migrations.Migration):
             assign_existing_data_to_legacy_tenant,
             migrations.RunPython.noop,
         ),
-        migrations.AddConstraint(
+        AddConstraintIfMissing(
             model_name='city',
             constraint=models.UniqueConstraint(fields=('tenant', 'state', 'name'), name='unique_city_per_tenant_state'),
         ),
-        migrations.AddConstraint(
+        AddConstraintIfMissing(
             model_name='country',
             constraint=models.UniqueConstraint(fields=('tenant', 'name'), name='unique_country_name_per_tenant'),
         ),
-        migrations.AddConstraint(
+        AddConstraintIfMissing(
             model_name='country',
             constraint=models.UniqueConstraint(condition=models.Q(('code__isnull', False)), fields=('tenant', 'code'), name='unique_country_code_per_tenant'),
         ),
-        migrations.AddConstraint(
+        AddConstraintIfMissing(
             model_name='emailsuppression',
             constraint=models.UniqueConstraint(fields=('tenant', 'email'), name='unique_email_suppression_per_tenant'),
         ),
-        migrations.AddConstraint(
+        AddConstraintIfMissing(
             model_name='inboundreply',
             constraint=models.UniqueConstraint(condition=models.Q(('message_id_hash__isnull', False)), fields=('tenant', 'message_id_hash'), name='unique_reply_message_per_tenant'),
         ),
-        migrations.AddConstraint(
+        AddConstraintIfMissing(
             model_name='quotation',
             constraint=models.UniqueConstraint(fields=('tenant', 'quotation_number'), name='unique_quotation_number_per_tenant'),
         ),
-        migrations.AddConstraint(
+        AddConstraintIfMissing(
             model_name='salesorder',
             constraint=models.UniqueConstraint(fields=('tenant', 'so_number'), name='unique_sales_order_number_per_tenant'),
         ),
-        migrations.AddConstraint(
+        AddConstraintIfMissing(
             model_name='state',
             constraint=models.UniqueConstraint(fields=('tenant', 'country', 'name'), name='unique_state_per_tenant_country'),
         ),

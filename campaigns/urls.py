@@ -18,6 +18,7 @@ from .views import (
     EmailTemplateViewSet,
     LeadCSVImportView,
     LeadCategoryListCreateView,
+    LeadBulkUpdateView,
     LeadDetailView,
     LeadListView,
     LeadOptionsView,
@@ -95,6 +96,11 @@ urlpatterns = [
         "leads/sample-data/",
         LeadSampleDataView.as_view(),
         name="lead-sample-data",
+    ),
+    path(
+        "leads/bulk-update/",
+        LeadBulkUpdateView.as_view(),
+        name="lead-bulk-update",
     ),
     path(
         "leads/",

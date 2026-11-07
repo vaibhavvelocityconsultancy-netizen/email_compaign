@@ -36,16 +36,18 @@ class EmailCampaignRequestLoggingMiddleware:
         endpoint = _campaign_endpoint(request.path_info)
         if endpoint is None:
             endpoint = next(
-                (prefix for prefix in ACCOUNT_API_PREFIXES
-                 if request.path_info == prefix.rstrip("/")
-                 or request.path_info.startswith(prefix)),
+                (
+                    prefix
+                    for prefix in ACCOUNT_API_PREFIXES
+                    if request.path_info == prefix.rstrip("/")
+                    or request.path_info.startswith(prefix)
+                ),
                 None,
             )
+        if endpoint is None and request.path_info.startswith("/api/"):
+            endpoint = "/api/"
         if endpoint is None:
-            if request.path_info.startswith("/api/"):
-                endpoint = "/api/"
-            else:
-                return self.get_response(request)
+            return self.get_response(request)
 
         started_at = perf_counter()
         try:
@@ -61,6 +63,7 @@ class EmailCampaignRequestLoggingMiddleware:
                 self._tenant_id(request),
                 type(error).__name__,
                 (perf_counter() - started_at) * 1000,
+                extra={"tenant_id": self._tenant_id(request)},
             )
             raise
 
@@ -77,6 +80,7 @@ class EmailCampaignRequestLoggingMiddleware:
             self._tenant_id(request),
             status_code,
             (perf_counter() - started_at) * 1000,
+            extra={"tenant_id": self._tenant_id(request)},
         )
         return response
 

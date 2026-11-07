@@ -1,14 +1,22 @@
 import logging
 import tempfile
+from datetime import timedelta
+from io import StringIO
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
+from django.core.management import call_command
 from django.http import HttpResponse
-from django.test import RequestFactory, SimpleTestCase
+from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.urls import resolve
+from django.utils import timezone
+from rest_framework.test import APIRequestFactory, force_authenticate
 
+from accounts.views import SystemLogAdminListView
 from campaigns.logging_handlers import LatestFirstTimedRotatingFileHandler
 from campaigns.middleware import EmailCampaignRequestLoggingMiddleware
+from campaigns.models import SystemLog
 
 
 class LatestFirstTimedRotatingFileHandlerTests(SimpleTestCase):
@@ -92,7 +100,7 @@ class EmailCampaignRequestLoggingMiddlewareTests(SimpleTestCase):
         self.assertIn("event=api.request.failed", log.call_args.args[1])
 
     @patch("campaigns.middleware.logger.log")
-    def test_does_not_log_unrelated_endpoints(self, log):
+    def test_logs_api_requests_from_other_modules(self, log):
         request = self.factory.get("/api/companies/")
         middleware = EmailCampaignRequestLoggingMiddleware(
             lambda request: HttpResponse(status=200)
@@ -100,7 +108,9 @@ class EmailCampaignRequestLoggingMiddlewareTests(SimpleTestCase):
 
         middleware(request)
 
-        log.assert_not_called()
+        log.assert_called_once()
+        self.assertIn("event=api.request", log.call_args.args[1])
+        self.assertEqual(log.call_args.args[3], "/api/")
 
     @patch("campaigns.middleware.logger.log")
     def test_does_not_log_unsubscribe_token(self, log):
@@ -114,3 +124,63 @@ class EmailCampaignRequestLoggingMiddlewareTests(SimpleTestCase):
 
         self.assertNotIn("private-token", str(log.call_args))
         self.assertIn("<str:token>", log.call_args.args[3])
+
+
+class CleanupSystemLogsCommandTests(TestCase):
+    def test_deletes_only_system_logs_older_than_10_days(self):
+        old_log = SystemLog.objects.create(
+            level="INFO",
+            logger_name="test",
+            module="test",
+            message="old",
+            source="test",
+        )
+        recent_log = SystemLog.objects.create(
+            level="INFO",
+            logger_name="test",
+            module="test",
+            message="recent",
+            source="test",
+        )
+        cutoff = timezone.now() - timedelta(days=10)
+        SystemLog.objects.filter(pk=old_log.pk).update(
+            created_at=cutoff - timedelta(seconds=1)
+        )
+        SystemLog.objects.filter(pk=recent_log.pk).update(created_at=cutoff)
+
+        output = StringIO()
+        call_command("cleanup_system_logs", stdout=output)
+
+        self.assertFalse(SystemLog.objects.filter(pk=old_log.pk).exists())
+        self.assertTrue(SystemLog.objects.filter(pk=recent_log.pk).exists())
+        self.assertIn("Deleted 1 system log(s)", output.getvalue())
+
+    def test_opening_system_logs_deletes_records_older_than_10_days(self):
+        old_log = SystemLog.objects.create(
+            level="INFO",
+            logger_name="test",
+            module="test",
+            message="old",
+            source="test",
+        )
+        recent_log = SystemLog.objects.create(
+            level="INFO",
+            logger_name="test",
+            module="test",
+            message="recent",
+            source="test",
+        )
+        cutoff = timezone.now() - timedelta(days=10)
+        SystemLog.objects.filter(pk=old_log.pk).update(
+            created_at=cutoff - timedelta(seconds=1)
+        )
+        SystemLog.objects.filter(pk=recent_log.pk).update(created_at=cutoff)
+
+        request = APIRequestFactory().get("/api/auth/system-logs/")
+        user = SimpleNamespace(is_authenticated=True, is_superuser=True)
+        force_authenticate(request, user=user)
+        response = SystemLogAdminListView.as_view()(request)
+
+        self.assertFalse(SystemLog.objects.filter(pk=old_log.pk).exists())
+        self.assertTrue(SystemLog.objects.filter(pk=recent_log.pk).exists())
+        self.assertEqual([log["id"] for log in response.data["results"]], [recent_log.pk])

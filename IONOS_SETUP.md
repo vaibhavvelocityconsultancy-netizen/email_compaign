@@ -34,4 +34,12 @@ No application scheduler is configured in this project. For automatic polling, s
 
 Use the same environment and database configuration as the Django application. The app's existing Gmail synchronization remains a separate command, `python manage.py sync_gmail_replies`.
 
+System logs older than 10 days are automatically purged whenever a super administrator opens or refreshes the System Logs page. They can also be purged manually with:
+
+```powershell
+python manage.py cleanup_system_logs
+```
+
+The cleanup command deletes `SystemLog` rows older than 10 days; it does not delete email campaign delivery logs.
+
 When sending a campaign, an explicitly configured campaign, tenant Mailgun, or tenant campaign reply-to address takes precedence. If none is set, a connected IONOS mailbox is used as the reply-to address; Mailgun continues to send the message.

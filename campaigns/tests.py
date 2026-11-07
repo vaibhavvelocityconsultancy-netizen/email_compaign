@@ -1230,6 +1230,49 @@ class CampaignAutomaticProcessingTests(TestCase):
 			format="json",
 		)
 
+	def test_template_only_campaign_sends_hides_and_cleans_up_generated_sequence(self):
+		from django.core import mail
+
+		with self.captureOnCommitCallbacks(execute=True):
+			response = self.client.post(
+				"/api/batches/",
+				{
+					"name": "One-time campaign",
+					"template": self.template.pk,
+					"lead_ids": [self.lead.pk],
+				},
+				format="json",
+			)
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(len(mail.outbox), 1)
+		self.assertEqual(mail.outbox[0].to, [self.lead.email])
+		self.assertTrue(response.data["sequence_is_auto_generated"])
+		sequence = Sequence.objects.get(pk=response.data["sequence"])
+		self.assertTrue(sequence.is_auto_generated)
+		self.assertEqual(sequence.name, "One-time campaign - One-time email")
+		self.assertEqual(
+			self.client.get("/api/email-sequences/").data,
+			[],
+		)
+		self.assertEqual(self.client.get("/api/sequence-steps/").data, [])
+
+		delete_response = self.client.delete(f"/api/batches/{response.data['id']}/")
+
+		self.assertEqual(delete_response.status_code, 204)
+		self.assertFalse(Sequence.objects.filter(pk=sequence.pk).exists())
+		self.assertFalse(SequenceStep.objects.filter(sequence=sequence).exists())
+
+	def test_deleting_campaign_keeps_user_sequence(self):
+		response = self.create_campaign(lead_ids=[])
+
+		self.assertEqual(response.status_code, 201, response.data)
+		delete_response = self.client.delete(f"/api/batches/{response.data['id']}/")
+
+		self.assertEqual(delete_response.status_code, 204)
+		self.assertTrue(Sequence.objects.filter(pk=self.sequence.pk).exists())
+		self.assertTrue(SequenceStep.objects.filter(pk=self.step.pk).exists())
+
 	@patch("campaigns.management.commands.process_email_campaign.save_to_sent")
 	def test_campaign_creation_sends_after_batch_leads_are_saved(self, _save_to_sent):
 		from django.core import mail

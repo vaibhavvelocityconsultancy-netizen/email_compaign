@@ -77,6 +77,9 @@ class SystemLogAdminListView(APIView):
     def get(self, request):
         from campaigns.models import SystemLog
 
+        SystemLog.objects.filter(
+            created_at__lt=timezone.now() - timedelta(days=10)
+        ).delete()
         queryset = SystemLog.objects.select_related("tenant").all()
         level = request.query_params.get("level")
         status_filter = request.query_params.get("status")
