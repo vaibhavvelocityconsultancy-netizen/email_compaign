@@ -826,6 +826,22 @@ class LeadCategoryListCreateView(APIView):
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 
+    def patch(self, request, pk):
+        category = get_object_or_404(
+            LeadCategory,
+            pk=pk,
+            tenant_id=request.user.tenant_id,
+        )
+        serializer = LeadCategorySerializer(
+            category,
+            data=request.data,
+            partial=True,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
 
 class LeadListView(APIView):
 

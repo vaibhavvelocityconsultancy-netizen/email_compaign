@@ -88,6 +88,11 @@ urlpatterns = [
         name="lead-category-list-create",
     ),
     path(
+        "lead-categories/<int:pk>/",
+        LeadCategoryListCreateView.as_view(),
+        name="lead-category-detail",
+    ),
+    path(
         "leads/import-csv/",
         LeadCSVImportView.as_view(),
         name="lead-csv-import",
