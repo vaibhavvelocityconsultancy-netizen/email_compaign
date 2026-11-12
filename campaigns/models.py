@@ -366,6 +366,7 @@ class Sequence(TenantOwnedModel):
     )
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
+    is_auto_generated = models.BooleanField(default=False)
     # created_by = models.ForeignKey('accounts.User', on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

@@ -827,6 +827,22 @@ class LeadCategoryListCreateView(APIView):
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 
+    def patch(self, request, pk):
+        category = get_object_or_404(
+            LeadCategory,
+            pk=pk,
+            tenant_id=request.user.tenant_id,
+        )
+        serializer = LeadCategorySerializer(
+            category,
+            data=request.data,
+            partial=True,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
 
 class LeadListView(APIView):
 
@@ -863,55 +879,104 @@ class LeadListView(APIView):
 
 
 class LeadBulkUpdateView(APIView):
-    allowed_fields = {
+    editable_fields = {
         "company_name",
+        "company_address",
+        "company_city",
+        "company_state",
+        "company_pincode",
+        "company_country",
+        "company_gst_number",
         "contact_name",
-        "status",
-        "source",
+        "contact_designation",
+        "contact_mobile",
+        "contact_email",
+        "category",
         "enquiry_for",
         "enquiry_date",
+        "source",
+        "status",
         "followup_date",
         "followup_remarks",
-        "category",
     }
 
+    @transaction.atomic
     def post(self, request):
-        lead_ids = request.data.get("ids", [])
-        updates = request.data.get("updates", {})
-
-        if not isinstance(lead_ids, list) or not lead_ids:
-            return Response({"ids": ["Select at least one lead."]}, status=status.HTTP_400_BAD_REQUEST)
-        if not isinstance(updates, dict):
-            return Response({"updates": ["Must be an object."]}, status=status.HTTP_400_BAD_REQUEST)
-
-        updates = {
-            key: value
-            for key, value in updates.items()
-            if key in self.allowed_fields
-        }
-        if not updates:
-            return Response({"updates": ["Select at least one field to update."]}, status=status.HTTP_400_BAD_REQUEST)
+        ids = request.data.get("ids")
+        updates = request.data.get("updates")
+        if (
+            not isinstance(ids, list)
+            or not ids
+            or any(type(lead_id) is not int or lead_id < 1 for lead_id in ids)
+        ):
+            return Response(
+                {"ids": "Provide a non-empty list of positive lead IDs."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not isinstance(updates, dict) or not updates:
+            return Response(
+                {"updates": "Provide at least one lead field to update."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        invalid_fields = set(updates) - self.editable_fields
+        if invalid_fields:
+            return Response(
+                {"updates": f"Unsupported fields: {', '.join(sorted(invalid_fields))}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         leads = list(
             Lead.objects.filter(
-                sr_no__in=lead_ids,
                 tenant_id=request.user.tenant_id,
                 is_active=True,
-            ).select_related("company", "contact", "category")
+                sr_no__in=set(ids),
+            ).select_related(
+                "company__city",
+                "company__state",
+                "company__country",
+                "contact",
+                "category",
+            )
         )
-        if len(leads) != len(set(map(int, lead_ids))):
-            return Response({"ids": ["One or more selected leads were not found."]}, status=status.HTTP_400_BAD_REQUEST)
+        if len(leads) != len(set(ids)):
+            return Response(
+                {"ids": "One or more selected leads were not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
-        with transaction.atomic():
-            for lead in leads:
-                serializer = LeadSerializer(
-                    lead,
-                    data=updates,
-                    partial=True,
-                    context={"request": request},
-                )
-                serializer.is_valid(raise_exception=True)
-                serializer.save()
+        for lead in leads:
+            company = lead.company
+            contact = lead.contact
+            data = {
+                "company_name": company.name if company else "",
+                "company_address": company.address if company else "",
+                "company_city": company.city.name if company and company.city else "",
+                "company_state": company.state.name if company and company.state else "",
+                "company_pincode": company.pincode if company else "",
+                "company_country": (
+                    company.country.name if company and company.country else "India"
+                ),
+                "company_gst_number": company.gst_number if company else "",
+                "contact_name": contact.name if contact else lead.name,
+                "contact_designation": contact.designation if contact else "",
+                "contact_mobile": contact.phone if contact else lead.phone,
+                "contact_email": contact.email if contact else lead.email or "",
+                "category": lead.category_id,
+                "enquiry_for": lead.enquiry_for,
+                "enquiry_date": lead.enquiry_date,
+                "source": lead.source,
+                "status": lead.status,
+                "followup_date": lead.followup_date,
+                "followup_remarks": lead.followup_remarks,
+            }
+            data.update(updates)
+            serializer = LeadSerializer(
+                lead,
+                data=data,
+                context={"request": request},
+            )
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
 
         return Response({"updated": len(leads)}, status=status.HTTP_200_OK)
 
@@ -1921,6 +1986,12 @@ class EmailSequenceViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
     queryset = Sequence.objects.all()
     serializer_class = SequenceSerializer
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.action == "list":
+            queryset = queryset.filter(is_auto_generated=False)
+        return queryset
+
     def perform_create(self, serializer):
         sequence = serializer.save(tenant_id=self.request.user.tenant_id)
         email_campaign_logger.info(
@@ -1953,11 +2024,14 @@ class EmailSequenceStepViewSet(viewsets.ModelViewSet):
     serializer_class = SequenceStepSerializer
 
     def get_queryset(self):
-        return _tenant_queryset(
+        queryset = _tenant_queryset(
             super().get_queryset(),
             self.request,
             "sequence__tenant",
         )
+        if self.action == "list":
+            queryset = queryset.exclude(sequence__is_auto_generated=True)
+        return queryset
 
     def perform_create(self, serializer):
         step = serializer.save()
@@ -2020,9 +2094,15 @@ class BatchViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
             ",".join(sorted(serializer.validated_data)),
         )
 
+    @transaction.atomic
     def perform_destroy(self, instance):
         campaign_id = instance.pk
+        sequence = instance.sequence
+        if sequence is not None and not sequence.is_auto_generated:
+            sequence = None
         super().perform_destroy(instance)
+        if sequence is not None and not Batch.objects.filter(sequence=sequence).exists():
+            sequence.delete()
         email_campaign_logger.info(
             "event=campaign.deleted actor_id=%s campaign_id=%s",
             _campaign_actor_id(self.request),
@@ -2150,26 +2230,11 @@ class BatchViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
                     {"detail": "Choose an email template."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-
-        if not batch.sequence_id:
-            if template is None:
-                return Response(
-                    {"detail": "Choose an email template before sending."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            sequence = Sequence.objects.create(
-                name=f"{batch.name} - One-time email",
-                channel=Channel.EMAIL,
-                tenant_id=batch.tenant_id,
+        if not batch.sequence_id and template is None:
+            return Response(
+                {"detail": "Choose an email template before sending."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-            SequenceStep.objects.create(
-                sequence=sequence,
-                step_number=1,
-                template=template,
-            )
-            batch.sequence = sequence
-            batch.save(update_fields=["sequence"])
-
         output = StringIO()
         command_options = {"batch_id": batch.pk, "force": True, "stdout": output}
         if template is not None:

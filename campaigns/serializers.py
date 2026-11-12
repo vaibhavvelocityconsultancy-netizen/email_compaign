@@ -691,6 +691,11 @@ class BatchSerializer(TenantScopedModelSerializer):
         write_only=True,
     )
     category_name = serializers.SerializerMethodField()
+    sequence_is_auto_generated = serializers.BooleanField(
+        source="sequence.is_auto_generated",
+        read_only=True,
+        default=False,
+    )
 
     class Meta:
         model = Batch
@@ -701,6 +706,7 @@ class BatchSerializer(TenantScopedModelSerializer):
             "template",
             "category",
             "category_name",
+            "sequence_is_auto_generated",
             "reply_to_email",
             "lead_ids",
             "status",
@@ -769,6 +775,7 @@ class BatchSerializer(TenantScopedModelSerializer):
             sequence = Sequence.objects.create(
                 name=f"{validated_data['name']} - One-time email",
                 channel=Channel.EMAIL,
+                is_auto_generated=True,
                 tenant_id=validated_data["tenant_id"],
             )
             SequenceStep.objects.create(

@@ -19,6 +19,7 @@ from .views import (
     LeadCSVImportView,
     LeadBulkUpdateView,
     LeadCategoryListCreateView,
+    LeadBulkUpdateView,
     LeadDetailView,
     LeadListView,
     LeadOptionsView,
@@ -88,6 +89,11 @@ urlpatterns = [
         name="lead-category-list-create",
     ),
     path(
+        "lead-categories/<int:pk>/",
+        LeadCategoryListCreateView.as_view(),
+        name="lead-category-detail",
+    ),
+    path(
         "leads/import-csv/",
         LeadCSVImportView.as_view(),
         name="lead-csv-import",
@@ -96,6 +102,11 @@ urlpatterns = [
         "leads/sample-data/",
         LeadSampleDataView.as_view(),
         name="lead-sample-data",
+    ),
+    path(
+        "leads/bulk-update/",
+        LeadBulkUpdateView.as_view(),
+        name="lead-bulk-update",
     ),
     path(
         "leads/",
