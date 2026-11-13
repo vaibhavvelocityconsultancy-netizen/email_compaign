@@ -1,7 +1,7 @@
 import mimetypes
 import os
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import requests
 from django.conf import settings
@@ -74,10 +74,33 @@ class Command(BaseCommand):
 				if step_index:
 					if not batch_lead.last_email_sent_at:
 						continue
-					send_after = batch_lead.last_email_sent_at + timedelta(
-						days=step.delay_days,
-						minutes=step.delay_minutes,
+					send_after = batch_lead.last_email_sent_at
+				if step.send_date:
+					base_time = send_after
+					local_base_time = (
+						timezone.localtime(base_time, timezone.get_current_timezone())
+						if timezone.is_aware(base_time)
+						else base_time
 					)
+					scheduled_naive = datetime.combine(
+						step.send_date,
+						step.send_time or local_base_time.time(),
+					)
+					send_after = (
+						timezone.make_aware(
+							scheduled_naive, timezone.get_current_timezone()
+						)
+						if timezone.is_aware(base_time)
+						else scheduled_naive
+					) + timedelta(minutes=step.delay_minutes)
+					if send_after <= base_time:
+						send_after = base_time
+				else:
+					if step_index:
+						send_after += timedelta(
+							days=step.delay_days,
+							minutes=step.delay_minutes,
+						)
 				if send_after > timezone.now():
 					continue
 

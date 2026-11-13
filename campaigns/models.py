@@ -382,6 +382,7 @@ class SequenceStep(models.Model):
     template = models.ForeignKey(MessageTemplate, on_delete=models.CASCADE)
     delay_days = models.PositiveIntegerField(default=0)
     delay_minutes = models.IntegerField(default=0)
+    send_date = models.DateField(null=True, blank=True)
     send_time = models.TimeField(null=True, blank=True)
 
     class Meta:

@@ -98,6 +98,22 @@ def save_to_sent(msg):
 
 
 def sequence_send_after(base_time, step):
+    if step.send_date:
+        local_base_time = (
+            timezone.localtime(base_time, timezone.get_current_timezone())
+            if timezone.is_aware(base_time)
+            else base_time
+        )
+        send_time = step.send_time or local_base_time.time()
+        scheduled_naive = datetime.combine(step.send_date, send_time)
+        scheduled = (
+            timezone.make_aware(scheduled_naive, timezone.get_current_timezone())
+            if timezone.is_aware(base_time)
+            else scheduled_naive
+        )
+        scheduled += timedelta(minutes=step.delay_minutes)
+        return scheduled if scheduled > base_time else base_time
+
     if not step.send_time:
         return base_time + timedelta(days=step.delay_days, minutes=step.delay_minutes)
 

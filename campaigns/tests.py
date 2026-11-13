@@ -1,7 +1,7 @@
 import csv
 import io
 import tempfile
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -1084,6 +1084,7 @@ class CampaignSequenceAPITests(TestCase):
 						"template": self.template.id,
 						"delay_days": 0,
 						"delay_minutes": 0,
+						"send_date": "2026-11-13",
 					}
 				],
 			},
@@ -1093,6 +1094,7 @@ class CampaignSequenceAPITests(TestCase):
 		self.assertEqual(response.status_code, 201, response.data)
 		sequence_id = response.data["id"]
 		self.assertEqual(len(response.data["steps"]), 1)
+		self.assertEqual(response.data["steps"][0]["send_date"], "2026-11-13")
 
 		update_response = self.client.patch(
 			f"/api/email-sequences/{sequence_id}/",
@@ -1103,6 +1105,7 @@ class CampaignSequenceAPITests(TestCase):
 						"template": self.template.id,
 						"delay_days": 2,
 						"delay_minutes": 15,
+						"send_date": "2026-11-14",
 					}
 				]
 			},
@@ -1112,6 +1115,31 @@ class CampaignSequenceAPITests(TestCase):
 		self.assertEqual(update_response.status_code, 200, update_response.data)
 		self.assertEqual(update_response.data["steps"][0]["delay_days"], 2)
 		self.assertEqual(update_response.data["steps"][0]["delay_minutes"], 15)
+		self.assertEqual(update_response.data["steps"][0]["send_date"], "2026-11-14")
+
+	def test_email_step_date_is_fixed_and_past_dates_are_due_immediately(self):
+		from types import SimpleNamespace
+
+		from campaigns.management.commands.process_email_campaign import (
+			sequence_send_after,
+		)
+
+		with timezone.override("UTC"):
+			base_time = timezone.make_aware(datetime(2026, 11, 13, 9, 30))
+			step = SimpleNamespace(
+				send_date=date(2026, 11, 14),
+				send_time=None,
+				delay_days=1,
+				delay_minutes=0,
+			)
+
+			self.assertEqual(
+				sequence_send_after(base_time, step),
+				timezone.make_aware(datetime(2026, 11, 14, 9, 30)),
+			)
+
+			step.send_date = date(2026, 11, 12)
+			self.assertEqual(sequence_send_after(base_time, step), base_time)
 
 	def test_rejects_template_from_a_different_channel(self):
 		whatsapp_template = MessageTemplate.objects.create(

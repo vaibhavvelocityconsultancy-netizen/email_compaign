@@ -597,6 +597,7 @@ class SequenceStepSerializer(TenantScopedModelSerializer):
             "template",
             "delay_days",
             "delay_minutes",
+            "send_date",
             "send_time",
         ]
         read_only_fields = ["id"]
@@ -620,6 +621,7 @@ class NestedSequenceStepSerializer(TenantScopedModelSerializer):
             "template",
             "delay_days",
             "delay_minutes",
+            "send_date",
             "send_time",
         ]
         read_only_fields = ["id"]
