@@ -663,6 +663,15 @@ class Command(BaseCommand):
                         flags=re.IGNORECASE,
                     )
 
+                    # Treat Markdown-style trailing backslashes as line breaks,
+                    # rather than showing the slash in the delivered email.
+                    body = re.sub(
+                        r"\\[ \t]*(?=\r?\n|$)|\\(?=\s*(?:<br\s*/?>|</?(?:div|p)\b))",
+                        "",
+                        body,
+                        flags=re.IGNORECASE,
+                    )
+
                     # Convert normal text line breaks to HTML
                     body = body.replace(
                         "\n",
@@ -713,6 +722,18 @@ class Command(BaseCommand):
                         'If you no longer want to receive these emails, '
                         '<a href="{}">unsubscribe here</a>.</p>',
                         unsubscribe_url,
+                    )
+
+                    # Keep emoji transport-safe through email APIs that may
+                    # mishandle emoji bytes while preserving normal UTF-8 text.
+                    emoji_pattern = re.compile(r"[\U0001F000-\U0001FAFF\u2600-\u27BF]\uFE0F?")
+                    html_parts = re.split(r"(<[^>]+>)", body)
+                    body = "".join(
+                        part if part.startswith("<") else emoji_pattern.sub(
+                            lambda match: "".join(f"&#x{ord(char):X};" for char in match.group(0)),
+                            part,
+                        )
+                        for part in html_parts
                     )
                     # --------------------------------
                     # CREATE EMAIL
@@ -765,6 +786,7 @@ class Command(BaseCommand):
                         reply_to=[reply_to_email],
                         connection=tenant_connection,
                     )
+                    msg.encoding = "utf-8"
                     msg.content_subtype = "html"
                     msg.extra_headers = {
                         "List-Unsubscribe": f"<{unsubscribe_url}>",
