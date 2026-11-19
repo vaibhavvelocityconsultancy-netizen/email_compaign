@@ -735,6 +735,11 @@ class Command(BaseCommand):
                         )
                         for part in html_parts
                     )
+                    body = (
+                        '<div style="font-family:Arial, &quot;Segoe UI Emoji&quot;, '
+                        '&quot;Apple Color Emoji&quot;, &quot;Noto Color Emoji&quot;, sans-serif;">'
+                        f"{body}</div>"
+                    )
                     # --------------------------------
                     # CREATE EMAIL
                     # --------------------------------
