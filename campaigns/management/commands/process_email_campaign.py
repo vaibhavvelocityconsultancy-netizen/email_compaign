@@ -1,6 +1,8 @@
 import os
+import base64
 import imaplib
 import logging
+import re
 from html import escape
 import logging
 from html import escape
@@ -551,6 +553,11 @@ class Command(BaseCommand):
                     lead = batch_lead.lead
 
                     company_name = lead.company.name if lead.company else ""
+                    city_name = (
+                        lead.company.city.name
+                        if lead.company and lead.company.city
+                        else ""
+                    )
                     contact_name = lead.contact.name if lead.contact else ""
                     enquiry_for = lead.get_enquiry_for_display()
                     lead_enquiry_date = enquiry_date or (
@@ -573,6 +580,8 @@ class Command(BaseCommand):
                         "{{company_name}}",
                         company_name
                     )
+
+                    subject = subject.replace("{{city}}", city_name)
 
                     subject = subject.replace(
                         "{{name}}",
@@ -598,11 +607,14 @@ class Command(BaseCommand):
                     )
 
                     body = template.body
+                    inline_body_images = []
 
                     body = body.replace(
                         "{{company_name}}",
                         company_name
                     )
+
+                    body = body.replace("{{city}}", city_name)
 
                     body = body.replace(
                         "{{name}}",
@@ -635,6 +647,20 @@ class Command(BaseCommand):
                     body = body.replace(
                         "{{your_name}}",
                         "sales team"
+                    )
+
+                    def embed_data_image(match):
+                        image_type = match.group(3).lower()
+                        image_data = base64.b64decode(match.group(4), validate=True)
+                        content_id = f"inline-image-{len(inline_body_images) + 1}"
+                        inline_body_images.append((content_id, image_type, image_data))
+                        return f'<img{match.group(1)}src="cid:{content_id}"{match.group(5)}>'
+
+                    body = re.sub(
+                        r'<img\b([^>]*?)\bsrc=(["\'])data:(image/[a-zA-Z0-9.+-]+);base64,([^"\']+)\2([^>]*)>',
+                        embed_data_image,
+                        body,
+                        flags=re.IGNORECASE,
                     )
 
                     # Convert normal text line breaks to HTML
@@ -744,6 +770,15 @@ class Command(BaseCommand):
                         "List-Unsubscribe": f"<{unsubscribe_url}>",
                         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
                     }
+
+                    if inline_body_images:
+                        msg.mixed_subtype = "related"
+                        for content_id, image_type, image_data in inline_body_images:
+                            image_subtype = image_type.split("/", 1)[1]
+                            inline_img = MIMEImage(image_data, _subtype=image_subtype)
+                            inline_img.add_header("Content-ID", f"<{content_id}>")
+                            inline_img.add_header("Content-Disposition", "inline")
+                            msg.attach(inline_img)
 
                     # Needed for inline logo
                     if template.logo:

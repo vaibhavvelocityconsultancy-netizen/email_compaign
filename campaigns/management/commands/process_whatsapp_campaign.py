@@ -138,12 +138,12 @@ class Command(BaseCommand):
 		}
 
 		try:
-		media_header = self._upload_template_media(
-			template=template,
-			access_token=access_token,
-			phone_number_id=phone_number_id,
-			api_version=api_version,
-		) if template.attachment else None
+			media_header = self._upload_template_media(
+				template=template,
+				access_token=access_token,
+				phone_number_id=phone_number_id,
+				api_version=api_version,
+			) if template.attachment else None
 			response = requests.post(
 				f"https://graph.facebook.com/{api_version}/{phone_number_id}/messages",
 				headers={"Authorization": f"Bearer {access_token}"},
@@ -203,10 +203,12 @@ class Command(BaseCommand):
 		media_type, _ = mimetypes.guess_type(template.attachment.name)
 		if media_type and media_type.startswith("image/"):
 			header_type = "image"
+		elif media_type and media_type.startswith("video/"):
+			header_type = "video"
 		elif media_type == "application/pdf":
 			header_type = "document"
 		else:
-			raise ValueError("WhatsApp template attachments must be an image or PDF.")
+			raise ValueError("WhatsApp template attachments must be an image, video, or PDF.")
 
 		with open(template.attachment.path, "rb") as media_file:
 			response = requests.post(
@@ -237,6 +239,7 @@ class Command(BaseCommand):
 			"name": contact.name if contact else "",
 			"first name": contact.name.split()[0] if contact and contact.name else "",
 			"company_name": company.name if company else "",
+			"city": company.city.name if company and company.city else "",
 			"enquiry_for": lead.get_enquiry_for_display(),
 			"product_name": "Product",
 			"your_name": "sales team",
