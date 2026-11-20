@@ -212,6 +212,8 @@ class Lead(TenantOwnedModel):
         ("HOT", "Hot"),
         ("COLD", "Cold"),
         ("OTHER", "Other"),
+        ("COMPLETED", "Completed"),
+        ("FAILED", "Failed"),
     ]
 
     # Compatibility fields used by older tests and simpler lead creation flows.

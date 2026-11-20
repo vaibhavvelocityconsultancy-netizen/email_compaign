@@ -29,6 +29,7 @@ from campaigns.models import (
     EmailCampaignSettings,
     EmailLog,
     IonosMailbox,
+    Lead,
     MessageTemplate,
 )
 from campaigns.unsubscribe import (
@@ -939,6 +940,9 @@ class Command(BaseCommand):
                             "completed",
                         ]
                     )
+                    Lead.objects.filter(pk=batch_lead.lead_id).update(
+                        status="COMPLETED"
+                    )
 
                     self.stdout.write(
                         self.style.SUCCESS(
@@ -960,12 +964,7 @@ class Command(BaseCommand):
                     )
 
                 except Exception as e:
-                    logger.exception(
-                        "event=email_send.failed campaign_id=%s lead_id=%s step=%s",
-                        batch.pk,
-                        batch_lead.lead_id,
-                        step.step_number if step else "unknown",
-                    )
+                    Lead.objects.filter(pk=batch_lead.lead_id).update(status="FAILED")
                     logger.exception(
                         "event=email_send.failed campaign_id=%s lead_id=%s step=%s",
                         batch.pk,
@@ -977,16 +976,6 @@ class Command(BaseCommand):
                     # LOG FAILED EMAIL
                     # --------------------------------
 
-                    if step is not None:
-                        EmailLog.objects.create(
-                            batch_lead=batch_lead,
-                            template=step.template,
-                            step_number=step.step_number,
-                            to_email=batch_lead.email,
-                            subject=step.template.subject,
-                            status=EmailLog.Status.FAILED,
-                            error=str(e),
-                        )
                     if step is not None:
                         EmailLog.objects.create(
                             batch_lead=batch_lead,

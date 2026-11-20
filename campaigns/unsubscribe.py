@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core import signing
 from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
-from django.urls import reverse
+from django.urls import get_script_prefix, reverse
 from django.utils import timezone
 
 from .models import BatchLead, EmailSuppression
@@ -64,7 +64,15 @@ def get_unsubscribe_url(batch_lead):
         )
 
     token = get_unsubscribe_token(batch_lead)
-    return f"{base_url}{reverse('campaign-unsubscribe', kwargs={'token': token})}"
+    path = reverse("campaign-unsubscribe", kwargs={"token": token})
+
+    # Remove the folder prefix (like /email_backend_crm) if Django added it,
+    # because base_url already has it.
+    prefix = get_script_prefix().rstrip("/")
+    if prefix and path.startswith(prefix):
+        path = path[len(prefix):]
+
+    return f"{base_url}{path}"
 
 
 @transaction.atomic
