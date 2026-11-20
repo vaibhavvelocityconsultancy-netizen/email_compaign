@@ -51,6 +51,19 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
+class BackupArchiveMixin:
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        from campaigns.backup import archive_before_delete
+
+        archive_before_delete(
+            instance,
+            self.request,
+            module=instance._meta.verbose_name_plural.title(),
+        )
+        instance.delete()
+
+
 def _gmail_tenant_id(request):
     if request.user.is_superuser:
         requested_tenant_id = request.query_params.get(
@@ -76,10 +89,15 @@ class SystemLogAdminListView(APIView):
 
     def get(self, request):
         from campaigns.models import SystemLog
+        from campaigns.backup import archive_and_delete_queryset
 
-        SystemLog.objects.filter(
-            created_at__lt=timezone.now() - timedelta(days=10)
-        ).delete()
+        archive_and_delete_queryset(
+            SystemLog.objects.filter(
+                created_at__lt=timezone.now() - timedelta(days=10)
+            ),
+            request,
+            "System logs",
+        )
         queryset = SystemLog.objects.select_related("tenant").all()
         level = request.query_params.get("level")
         status_filter = request.query_params.get("status")
@@ -125,6 +143,7 @@ class SystemLogAdminMarkAllReadView(APIView):
 class SystemLogAdminActionView(APIView):
     permission_classes = [IsSuperUser]
 
+    @transaction.atomic
     def post(self, request, log_id):
         from campaigns.models import SystemLog
         log = get_object_or_404(SystemLog, pk=log_id)
@@ -135,6 +154,9 @@ class SystemLogAdminActionView(APIView):
             log.is_acknowledged = True
             log.is_read = True
         elif action == "dismiss":
+            from campaigns.backup import archive_before_delete
+
+            archive_before_delete(log, request, module="System logs")
             log.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
         else:
@@ -198,6 +220,7 @@ class TenantAdminListView(APIView):
 class TenantAdminDetailView(APIView):
     permission_classes = [IsSuperUser]
 
+    @transaction.atomic
     def delete(self, request, tenant_id):
         tenant = get_object_or_404(Tenant, pk=tenant_id)
         if tenant.users.exists():
@@ -205,6 +228,9 @@ class TenantAdminDetailView(APIView):
                 {"detail": "Cannot delete a tenant that has users. Remove its users first."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        from campaigns.backup import archive_before_delete
+
+        archive_before_delete(tenant, request, module="Tenants")
         tenant.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -271,7 +297,7 @@ class TenantMailgunSettingsDetailView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class UserViewSet(viewsets.ModelViewSet):
+class UserViewSet(BackupArchiveMixin, viewsets.ModelViewSet):
     queryset = get_user_model().objects.all().order_by("id")
     serializer_class = UserManagementSerializer
     permission_classes = [permissions.IsAdminUser]
@@ -283,19 +309,19 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer.save(tenant=self.request.user.tenant)
 
 
-class RoleViewSet(viewsets.ModelViewSet):
+class RoleViewSet(BackupArchiveMixin, viewsets.ModelViewSet):
     queryset = Role.objects.all().order_by("id")
     serializer_class = RoleSerializer
     permission_classes = [permissions.IsAdminUser]
 
 
-class ModuleViewSet(viewsets.ModelViewSet):
+class ModuleViewSet(BackupArchiveMixin, viewsets.ModelViewSet):
     queryset = Module.objects.all().order_by("id")
     serializer_class = ModuleSerializer
     permission_classes = [permissions.IsAdminUser]
 
 
-class RolePermissionViewSet(viewsets.ModelViewSet):
+class RolePermissionViewSet(BackupArchiveMixin, viewsets.ModelViewSet):
     queryset = RolePermission.objects.select_related("role", "module").all().order_by("id")
     serializer_class = RolePermissionSerializer
     permission_classes = [permissions.IsAdminUser]

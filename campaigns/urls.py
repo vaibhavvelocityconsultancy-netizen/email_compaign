@@ -3,6 +3,8 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     BatchViewSet,
+    BackupListView,
+    BackupRestoreView,
     CityViewSet,
     CompanyContactDetailView,
     CompanyContactListCreateView,
@@ -64,6 +66,8 @@ router.register("sequence-steps", EmailSequenceStepViewSet, basename="sequence-s
 router.register("batches", BatchViewSet, basename="batch")
 
 urlpatterns = [
+    path("backups/", BackupListView.as_view(), name="backup-list"),
+    path("backups/<int:pk>/restore/", BackupRestoreView.as_view(), name="backup-restore"),
   # companies master
     path("companies/", CompanyListView.as_view(), name="company-list"),
     path("companies/<int:pk>/", CompanyDetailView.as_view(), name="company-detail"),

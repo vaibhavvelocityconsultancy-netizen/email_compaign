@@ -1,4 +1,5 @@
 import hashlib
+import uuid
 
 from django.core.exceptions import ValidationError
 from django.conf import settings
@@ -410,6 +411,7 @@ class Batch(TenantOwnedModel):
         ACTIVE = "active", "Active"
         PAUSED = "paused", "Paused"
         COMPLETED = "completed", "Completed"
+        INACTIVE = "inactive", "Inactive"
 
     name = models.CharField(max_length=255)
     category = models.ForeignKey(
@@ -1281,3 +1283,36 @@ class TaskAttachment(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='attachments')
     file = models.FileField(upload_to='task_files/')
     file_name = models.CharField(max_length=255, blank=True)
+
+
+class BackupRecord(models.Model):
+    deletion_group = models.UUIDField(default=uuid.uuid4, db_index=True)
+    module = models.CharField(max_length=80, db_index=True)
+    model_label = models.CharField(max_length=120)
+    object_id = models.CharField(max_length=64)
+    record_name = models.CharField(max_length=255, blank=True)
+    payload = models.TextField()
+    restore_fields = models.JSONField(default=dict, blank=True)
+    tenant = models.ForeignKey(
+        "accounts.Tenant",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="backup_records",
+    )
+    deleted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="deleted_backup_records",
+    )
+    deleted_at = models.DateTimeField(default=timezone.now, db_index=True)
+    expires_at = models.DateTimeField(db_index=True)
+    restored_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-deleted_at", "-id"]
+
+    def __str__(self):
+        return self.record_name or f"{self.model_label} #{self.object_id}"

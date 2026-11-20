@@ -673,7 +673,11 @@ class SequenceSerializer(TenantScopedModelSerializer):
         steps_data = validated_data.pop("steps", None)
         sequence = super().update(instance, validated_data)
         if steps_data is not None:
-            sequence.steps.all().delete()
+            from campaigns.backup import archive_and_delete_queryset
+
+            archive_and_delete_queryset(
+                sequence.steps.all(), self.context.get("request"), "Email sequences"
+            )
             for step_data in steps_data:
                 step_data.pop("sequence", None)
                 SequenceStep.objects.create(sequence=sequence, **step_data)
@@ -1113,7 +1117,13 @@ class OpportunityCreateSerializer(TenantScopedModelSerializer):
         opportunity = super().update(instance, validated_data)
 
         if modules_data is not None:
-            opportunity.modules.all().delete()
+            from campaigns.backup import archive_and_delete_queryset
+
+            archive_and_delete_queryset(
+                opportunity.modules.all(),
+                self.context.get("request"),
+                "Opportunities",
+            )
             for index, module_data in enumerate(modules_data, start=1):
                 module_data.setdefault('module_number', index)
                 OpportunityModule.objects.create(
@@ -1451,7 +1461,11 @@ class QuotationSerializer(TenantScopedModelSerializer):
             quotation.company = selected_company
             quotation.save(update_fields=["company", "updated_at"])
         if items_data is not None:
-            quotation.items.all().delete()
+            from campaigns.backup import archive_and_delete_queryset
+
+            archive_and_delete_queryset(
+                quotation.items.all(), self.context.get("request"), "Quotations"
+            )
             for item_data in items_data:
                 QuotationItem.objects.create(quotation=quotation, **item_data)
         return quotation

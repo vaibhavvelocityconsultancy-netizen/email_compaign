@@ -10,7 +10,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.forms import models
 from django.shortcuts import get_object_or_404, render
 from django.db.models import Count, Q
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.views import View
 from rest_framework.response import Response
 from rest_framework import generics, viewsets, status
@@ -79,6 +79,7 @@ from campaigns.serializers import (
 from .models import (
     Batch,
     BatchLead,
+    BackupRecord,
     Channel,
     City,
     Company,
@@ -111,6 +112,12 @@ from campaigns.unsubscribe import (
     resolve_unsubscribe_token,
     sync_mailgun_suppression,
 )
+from campaigns.backup import (
+    archive_and_delete_queryset,
+    archive_before_delete,
+    purge_expired_backups,
+    restore_backup_group,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -132,6 +139,15 @@ class TenantScopedViewSetMixin:
 
     def perform_create(self, serializer):
         serializer.save(tenant_id=self.request.user.tenant_id)
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        archive_before_delete(
+            instance,
+            self.request,
+            module=instance._meta.verbose_name_plural.title(),
+        )
+        instance.delete()
 
 
 def _campaign_actor_id(request):
@@ -245,7 +261,14 @@ class CompanyContactDetailView(generics.RetrieveUpdateDestroyAPIView):
             is_active=True,
         ), self.request, "company__tenant")
 
+    @transaction.atomic
     def perform_destroy(self, instance):
+        archive_before_delete(
+            instance,
+            self.request,
+            module="Companies",
+            restore_fields=("is_active",),
+        )
         instance.is_active = False
         instance.save(update_fields=["is_active"])
 
@@ -357,8 +380,15 @@ class TaskDetailView(APIView):
         _add_task_attachments(task, request)
         return Response(TaskSerializer(task, context={"request": request}).data)
 
+    @transaction.atomic
     def delete(self, request, pk):
         task = self.get_object(request, pk)
+        archive_before_delete(
+            task,
+            request,
+            module="Tasks",
+            restore_fields=("is_deleted",),
+        )
         task.is_deleted = True
         task.save(update_fields=["is_deleted", "updated_at"])
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -990,6 +1020,17 @@ class LeadDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         return _tenant_queryset(super().get_queryset(), self.request)
 
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        archive_before_delete(
+            instance,
+            self.request,
+            module="Leads",
+            restore_fields=("is_active",),
+        )
+        instance.is_active = False
+        instance.save(update_fields=["is_active", "updated_at"])
+
 
 class OpportunityListCreateView(generics.ListCreateAPIView):
     queryset = Opportunity.objects.filter(is_active=True).prefetch_related("modules")
@@ -1009,7 +1050,14 @@ class OpportunityDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         return _tenant_queryset(super().get_queryset(), self.request)
 
+    @transaction.atomic
     def perform_destroy(self, instance):
+        archive_before_delete(
+            instance,
+            self.request,
+            module="Opportunities",
+            restore_fields=("is_active",),
+        )
         instance.is_active = False
         instance.save(update_fields=["is_active", "updated_at"])
 
@@ -1051,6 +1099,11 @@ class OpportunityModuleDetailView(generics.RetrieveUpdateDestroyAPIView):
             opportunity_id=self.kwargs["opportunity_id"],
             opportunity__is_active=True,
         ), self.request, "opportunity__tenant")
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        archive_before_delete(instance, self.request, module="Opportunities")
+        instance.delete()
 
 
 class QuotationListCreateView(generics.ListCreateAPIView):
@@ -1116,6 +1169,11 @@ class QuotationDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return _tenant_queryset(super().get_queryset(), self.request)
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        archive_before_delete(instance, self.request, module="Quotations")
+        instance.delete()
 
 def _generate_final_offer_pdf_bytes(quotation):
     company = quotation.company or (
@@ -1274,7 +1332,9 @@ class UpdateFinalOfferView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        quotation.items.all().delete()
+        archive_and_delete_queryset(
+            quotation.items.all(), request, "Quotations"
+        )
         for item_data in items_data:
             item_data = dict(item_data)
             module = item_data.pop("module", None)
@@ -1790,6 +1850,74 @@ class IsSuperuserOnly(BasePermission):
         return bool(request.user and request.user.is_authenticated and request.user.is_superuser)
 
 
+class BackupListView(APIView):
+    permission_classes = [IsSuperuserOnly]
+
+    def get(self, request):
+        purge_expired_backups()
+        queryset = BackupRecord.objects.filter(
+            restored_at__isnull=True,
+            expires_at__gt=timezone.now(),
+        ).select_related("tenant", "deleted_by")
+        module = request.query_params.get("module")
+        if module:
+            queryset = queryset.filter(module=module)
+        search = request.query_params.get("search", "").strip()
+        if search:
+            queryset = queryset.filter(record_name__icontains=search)
+
+        modules = list(
+            BackupRecord.objects.filter(
+                restored_at__isnull=True,
+                expires_at__gt=timezone.now(),
+            )
+            .order_by("module")
+            .values_list("module", flat=True)
+            .distinct()
+        )
+        return Response(
+            {
+                "modules": modules,
+                "results": [
+                    {
+                        "id": record.pk,
+                        "module": record.module,
+                        "record_name": record.record_name,
+                        "model": record.model_label,
+                        "object_id": record.object_id,
+                        "tenant": record.tenant.name if record.tenant else None,
+                        "deleted_by": (
+                            record.deleted_by.get_username()
+                            if record.deleted_by
+                            else None
+                        ),
+                        "deleted_at": record.deleted_at,
+                        "expires_at": record.expires_at,
+                    }
+                    for record in queryset
+                ],
+            }
+        )
+
+
+class BackupRestoreView(APIView):
+    permission_classes = [IsSuperuserOnly]
+
+    def post(self, request, pk):
+        record = get_object_or_404(
+            BackupRecord.objects.filter(
+                restored_at__isnull=True,
+                expires_at__gt=timezone.now(),
+            ),
+            pk=pk,
+        )
+        try:
+            restored_count = restore_backup_group(record.deletion_group)
+        except (ValueError, IntegrityError) as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response({"restored": restored_count}, status=status.HTTP_200_OK)
+
+
 class UnsubscribePageSettingsView(APIView):
     permission_classes = [IsSuperuserOnly]
 
@@ -2052,10 +2180,12 @@ class EmailSequenceStepViewSet(viewsets.ModelViewSet):
             step.pk,
         )
 
+    @transaction.atomic
     def perform_destroy(self, instance):
         sequence_id = instance.sequence_id
         step_id = instance.pk
-        super().perform_destroy(instance)
+        archive_before_delete(instance, self.request, module="Email sequences")
+        instance.delete()
         email_campaign_logger.info(
             "event=sequence_step.deleted actor_id=%s sequence_id=%s step_id=%s",
             _campaign_actor_id(self.request),
@@ -2067,6 +2197,9 @@ class EmailSequenceStepViewSet(viewsets.ModelViewSet):
 class BatchViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
     queryset = Batch.objects.select_related("sequence", "category")
     serializer_class = BatchSerializer
+
+    def get_queryset(self):
+        return super().get_queryset().exclude(status=Batch.Status.INACTIVE)
 
     def perform_create(self, serializer):
         batch = serializer.save(tenant_id=self.request.user.tenant_id)
@@ -2097,14 +2230,17 @@ class BatchViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
     @transaction.atomic
     def perform_destroy(self, instance):
         campaign_id = instance.pk
-        sequence = instance.sequence
-        if sequence is not None and not sequence.is_auto_generated:
-            sequence = None
-        super().perform_destroy(instance)
-        if sequence is not None and not Batch.objects.filter(sequence=sequence).exists():
-            sequence.delete()
+        archive_before_delete(
+            instance,
+            self.request,
+            module="Email campaigns",
+            restore_fields=("status",),
+            restore_values={"status": Batch.Status.PAUSED},
+        )
+        instance.status = Batch.Status.INACTIVE
+        instance.save(update_fields=["status"])
         email_campaign_logger.info(
-            "event=campaign.deleted actor_id=%s campaign_id=%s",
+            "event=campaign.inactivated actor_id=%s campaign_id=%s",
             _campaign_actor_id(self.request),
             campaign_id,
         )
@@ -2122,7 +2258,7 @@ class BatchViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
             batch = (
                 Batch.objects.select_related("sequence")
                 .prefetch_related("sequence__steps")
-                .get(pk=batch_id)
+                .get(pk=batch_id, status=Batch.Status.ACTIVE)
             )
         except Batch.DoesNotExist:
             logger.warning(
