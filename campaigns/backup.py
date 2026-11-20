@@ -43,15 +43,7 @@ MODEL_MODULES = {
 
 
 def _tenant_id_for(instance, fallback=None):
-    root_tenant = (
-        instance
-        if instance._meta.label_lower == "accounts.tenant"
-        else getattr(instance, "tenant", None)
-    )
-    tenant_id = getattr(instance, "tenant_id", None) or getattr(
-        root_tenant, "pk", None
-    )
-    tenant_name = getattr(root_tenant, "name", "")
+    tenant_id = getattr(instance, "tenant_id", None)
     if tenant_id:
         return tenant_id
     for field in instance._meta.concrete_fields:
@@ -109,7 +101,15 @@ def archive_before_delete(
         if instance not in objects:
             objects.insert(0, instance)
 
-    tenant_id = getattr(instance, "tenant_id", None)
+    root_tenant = (
+        instance
+        if instance._meta.label_lower == "accounts.tenant"
+        else getattr(instance, "tenant", None)
+    )
+    tenant_id = getattr(instance, "tenant_id", None) or getattr(
+        root_tenant, "pk", None
+    )
+    tenant_name = getattr(root_tenant, "name", "")
     user = getattr(request, "user", None)
     deleted_by = user if getattr(user, "is_authenticated", False) else None
     entries = []
