@@ -2,6 +2,7 @@ from decimal import Decimal, InvalidOperation
 from io import BytesIO, StringIO
 from textwrap import wrap
 from openpyxl import load_workbook
+import xlrd
 
 from django.core.files.base import ContentFile
 from django.core.management import call_command
@@ -602,7 +603,6 @@ class LeadCSVImportView(APIView):
                     if any(value is not None for value in row)
                 )
             else:
-                import xlrd
                 workbook = xlrd.open_workbook(file_contents=csv_file.read())
                 sheet = workbook.sheet_by_index(0)
                 headers = [str(value or "").strip().lower() for value in sheet.row_values(0)]
@@ -2699,8 +2699,27 @@ def mailgun_webhook(request):
             )
 
         # Update the email log status
+        update_fields = ["status"]
+        
+        if event == "failed":
+            delivery_status = event_data.get("delivery-status", {})
+            if not isinstance(delivery_status, dict):
+                delivery_status = {}
+        
+            failure_reason = (
+                delivery_status.get("message")
+                or delivery_status.get("description")
+                or delivery_status.get("reason")
+                or event_data.get("reason")
+                or ""
+            )
+        
+            if failure_reason:
+                email_log.error = str(failure_reason)
+                update_fields.append("error")
+        
         email_log.status = new_status
-        email_log.save(update_fields=["status"])
+        email_log.save(update_fields=update_fields)
 
         email_campaign_logger.info(
             "event=mailgun_status.updated "
@@ -2746,6 +2765,7 @@ def mailgun_webhook(request):
             },
             status=500,
         )
+        
 
 
 # Unsubscribe endpoint for email campaigns
