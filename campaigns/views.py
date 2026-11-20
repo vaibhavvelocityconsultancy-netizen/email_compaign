@@ -2065,7 +2065,7 @@ class EmailSequenceStepViewSet(viewsets.ModelViewSet):
 
 
 class BatchViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
-    queryset = Batch.objects.all()
+    queryset = Batch.objects.select_related("sequence", "category")
     serializer_class = BatchSerializer
 
     def perform_create(self, serializer):

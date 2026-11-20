@@ -693,6 +693,11 @@ class BatchSerializer(TenantScopedModelSerializer):
         write_only=True,
     )
     category_name = serializers.SerializerMethodField()
+    sequence_name = serializers.CharField(
+        source="sequence.name",
+        read_only=True,
+        allow_null=True,
+    )
     sequence_is_auto_generated = serializers.BooleanField(
         source="sequence.is_auto_generated",
         read_only=True,
@@ -708,6 +713,7 @@ class BatchSerializer(TenantScopedModelSerializer):
             "template",
             "category",
             "category_name",
+            "sequence_name",
             "sequence_is_auto_generated",
             "reply_to_email",
             "lead_ids",
