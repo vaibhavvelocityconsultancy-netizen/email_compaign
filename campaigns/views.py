@@ -1885,7 +1885,8 @@ class BackupListView(APIView):
                         "record_name": record.record_name,
                         "model": record.model_label,
                         "object_id": record.object_id,
-                        "tenant": record.tenant.name if record.tenant else None,
+                        "tenant": record.tenant_name
+                        or (record.tenant.name if record.tenant else None),
                         "deleted_by": (
                             record.deleted_by.get_username()
                             if record.deleted_by

@@ -1300,6 +1300,7 @@ class BackupRecord(models.Model):
         blank=True,
         related_name="backup_records",
     )
+    tenant_name = models.CharField(max_length=200, blank=True)
     deleted_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

@@ -43,7 +43,15 @@ MODEL_MODULES = {
 
 
 def _tenant_id_for(instance, fallback=None):
-    tenant_id = getattr(instance, "tenant_id", None)
+    root_tenant = (
+        instance
+        if instance._meta.label_lower == "accounts.tenant"
+        else getattr(instance, "tenant", None)
+    )
+    tenant_id = getattr(instance, "tenant_id", None) or getattr(
+        root_tenant, "pk", None
+    )
+    tenant_name = getattr(root_tenant, "name", "")
     if tenant_id:
         return tenant_id
     for field in instance._meta.concrete_fields:
@@ -54,6 +62,28 @@ def _tenant_id_for(instance, fallback=None):
             tenant_id = getattr(related, "tenant_id", None)
             if tenant_id:
                 return tenant_id
+    return fallback
+
+
+def _tenant_name_for(instance, fallback="", visited=None):
+    visited = visited or set()
+    identity = (instance._meta.label_lower, str(instance.pk))
+    if identity in visited:
+        return fallback
+    visited.add(identity)
+    if instance._meta.label_lower == "accounts.tenant":
+        return getattr(instance, "name", "")
+    tenant = getattr(instance, "tenant", None)
+    if tenant is not None:
+        return getattr(tenant, "name", "") or fallback
+    for field in instance._meta.concrete_fields:
+        if not field.is_relation or not field.many_to_one:
+            continue
+        related = getattr(instance, field.name, None)
+        if related is not None:
+            name = _tenant_name_for(related, fallback, visited)
+            if name:
+                return name
     return fallback
 
 
@@ -95,6 +125,7 @@ def archive_before_delete(
             record_name = str(obj)[:255]
         except Exception:
             record_name = f"{obj._meta.verbose_name} #{obj.pk}"
+        record_tenant_name = _tenant_name_for(obj, tenant_name)
         entries.append(
             BackupRecord(
                 deletion_group=group_id,
@@ -105,6 +136,7 @@ def archive_before_delete(
                 payload=serializers.serialize("json", [obj]),
                 restore_fields=fields_to_restore,
                 tenant_id=_tenant_id_for(obj, tenant_id),
+                tenant_name=record_tenant_name,
                 deleted_by=deleted_by,
                 deleted_at=deleted_at,
                 expires_at=deleted_at + timedelta(days=RETENTION_DAYS),
