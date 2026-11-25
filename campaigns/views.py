@@ -3089,8 +3089,42 @@ def mailgun_webhook(request):
             )
 
         # Update the email log status
+        update_fields = ["status"]
+        if event == "failed":
+            delivery_status = event_data.get("delivery-status", {})
+            if not isinstance(delivery_status, dict):
+                delivery_status = {}
+
+            failure_reason = next(
+                (
+                    value.strip()
+                    for value in (
+                        delivery_status.get("message"),
+                        delivery_status.get("description"),
+                        delivery_status.get("reason"),
+                        event_data.get("reason"),
+                    )
+                    if isinstance(value, str) and value.strip()
+                ),
+                "",
+            )
+            if not failure_reason and delivery_status.get("code"):
+                failure_reason = (
+                    f"Mailgun delivery failed with code "
+                    f"{delivery_status['code']}."
+                )
+
+            if failure_reason:
+                email_log.error = failure_reason
+                update_fields.append("error")
+            else:
+                email_campaign_logger.warning(
+                    "event=mailgun_status.failure_reason_missing message_log_id=%s",
+                    email_log.pk,
+                )
+
         email_log.status = new_status
-        email_log.save(update_fields=["status"])
+        email_log.save(update_fields=update_fields)
 
         email_campaign_logger.info(
             "event=mailgun_status.updated "
