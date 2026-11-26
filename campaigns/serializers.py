@@ -85,7 +85,7 @@ class CountrySerializer(TenantScopedModelSerializer):
 class StateSerializer(TenantScopedModelSerializer):
     class Meta:
         model = State
-        fields = ["id", "name", "country", "is_active"]
+        fields = ["id", "name", "iso_code", "country", "is_active"]
 
 
 class CitySerializer(TenantScopedModelSerializer):

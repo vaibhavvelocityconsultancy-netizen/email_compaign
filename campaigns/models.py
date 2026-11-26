@@ -99,6 +99,7 @@ class CompanyContact(models.Model):
 class Country(TenantOwnedModel):
     name = models.CharField(max_length=100)
     code = models.CharField(max_length=10, null=True, blank=True)
+    states_synced_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -125,6 +126,8 @@ class State(TenantOwnedModel):
         Country, on_delete=models.CASCADE, related_name="states"
     )
     name = models.CharField(max_length=100)
+    iso_code = models.CharField(max_length=10, null=True, blank=True)
+    cities_synced_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -135,7 +138,12 @@ class State(TenantOwnedModel):
             models.UniqueConstraint(
                 fields=["tenant", "country", "name"],
                 name="unique_state_per_tenant_country",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["tenant", "country", "iso_code"],
+                condition=models.Q(iso_code__isnull=False),
+                name="unique_state_iso_code_per_tenant_country",
+            ),
         ]
 
     def __str__(self):

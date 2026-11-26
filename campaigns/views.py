@@ -119,6 +119,12 @@ from campaigns.backup import (
     purge_expired_backups,
     restore_backup_group,
 )
+from campaigns.location_sync import (
+    LocationSyncError,
+    search_and_cache_countries,
+    sync_cities,
+    sync_states,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -189,10 +195,58 @@ class CountryViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
     queryset = Country.objects.all()
     serializer_class = CountrySerializer
 
+    def list(self, request, *args, **kwargs):
+        search = request.query_params.get("search", "").strip()
+        tenant_id = request.user.tenant_id
+        if search and tenant_id:
+            if len(search) < 2:
+                return Response(
+                    {"detail": "Enter at least 2 characters to search countries."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            cached_exact_match = Country.objects.filter(
+                tenant_id=tenant_id,
+                name__iexact=search,
+                is_active=True,
+            ).first()
+            if not cached_exact_match or len((cached_exact_match.code or "").strip()) != 2:
+                try:
+                    search_and_cache_countries(tenant_id, search)
+                except LocationSyncError as exc:
+                    return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        queryset = self.filter_queryset(self.get_queryset()).filter(is_active=True)
+        if search:
+            queryset = queryset.filter(name__icontains=search)
+        page = self.paginate_queryset(queryset)
+        serializer = self.get_serializer(page if page is not None else queryset, many=True)
+        return self.get_paginated_response(serializer.data) if page is not None else Response(serializer.data)
+
+    @action(detail=True, methods=["get"])
+    def states(self, request, pk=None):
+        country = self.get_object()
+        try:
+            sync_states(country)
+        except LocationSyncError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        queryset = State.objects.filter(tenant_id=request.user.tenant_id, country=country)
+        serializer = StateSerializer(queryset.filter(is_active=True), many=True, context={"request": request})
+        return Response(serializer.data)
+
 
 class StateViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
     queryset = State.objects.all()
     serializer_class = StateSerializer
+
+    @action(detail=True, methods=["get"])
+    def cities(self, request, pk=None):
+        state = self.get_object()
+        try:
+            sync_cities(state)
+        except LocationSyncError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        queryset = City.objects.filter(tenant_id=request.user.tenant_id, state=state)
+        serializer = CitySerializer(queryset.filter(is_active=True), many=True, context={"request": request})
+        return Response(serializer.data)
 
 
 class CityViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
