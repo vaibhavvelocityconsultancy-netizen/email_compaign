@@ -266,6 +266,8 @@ class Command(BaseCommand):
             "first name": contact.name.split()[0] if contact and contact.name else "",
             "company_name": company.name if company else "",
             "city": company.city.name if company and company.city else "",
+            "state": company.state.name if company and company.state else "",
+            "country": company.country.name if company and company.country else "",
             "enquiry_for": lead.get_enquiry_for_display(),
             "product_name": "Product",
             "your_name": "sales team",

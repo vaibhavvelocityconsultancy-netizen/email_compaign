@@ -559,6 +559,16 @@ class Command(BaseCommand):
                         if lead.company and lead.company.city
                         else ""
                     )
+                    state_name = (
+                        lead.company.state.name
+                        if lead.company and lead.company.state
+                        else ""
+                    )
+                    country_name = (
+                        lead.company.country.name
+                        if lead.company and lead.company.country
+                        else ""
+                    )
                     contact_name = lead.contact.name if lead.contact else ""
                     enquiry_for = lead.get_enquiry_for_display()
                     lead_enquiry_date = enquiry_date or (
@@ -583,6 +593,8 @@ class Command(BaseCommand):
                     )
 
                     subject = subject.replace("{{city}}", city_name)
+                    subject = subject.replace("{{state}}", state_name)
+                    subject = subject.replace("{{country}}", country_name)
 
                     subject = subject.replace(
                         "{{name}}",
@@ -616,6 +628,8 @@ class Command(BaseCommand):
                     )
 
                     body = body.replace("{{city}}", city_name)
+                    body = body.replace("{{state}}", state_name)
+                    body = body.replace("{{country}}", country_name)
 
                     body = body.replace(
                         "{{name}}",
